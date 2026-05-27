@@ -4,11 +4,10 @@
 #include <iomanip>
 #include <stdint.h>
 #include <arpa/inet.h>
+#include <filesystem>
 
 #include "TFile.h"
 #include "TTree.h"
-
-#include <filesystem>
 
 using namespace std;
 
@@ -61,14 +60,15 @@ int main (int argc, char** argv) {
     return 1;
   }
 
-  const int number_of_boards=2;
+  
+  const int number_of_boards = 2;
+  const int number_of_groups = 4;
+  const int ch_per_group     = 8;
+  const int total_ch         = number_of_groups * ch_per_group;
   const int sample_n = 1024; 
-
 
   ifstream ifs(argv[1], ios::binary);
   if (!ifs) return 1;
-
-  int event_count = 0;
 
   std::filesystem::path rootfilename = argv[1];
   rootfilename.replace_extension(".root");
@@ -78,32 +78,44 @@ int main (int argc, char** argv) {
   TTree *tree = new TTree("tree", "Waveform tree");
 
   // TTree Variables
-  int nsamples;
-  int boardid;
-  int channelid;
-  vector<unsigned short> amplitude;
-  
+  Long64_t ev_id;
   // Branches
-  tree->Branch("nsamples",  &nsamples);
-  tree->Branch("boardid",   &boardid);
-  tree->Branch("channelid", &channelid);
-  tree->Branch("amplitude", &amplitude);
+  tree->Branch("ev_id",     &ev_id);
+
+
+  // Amplitude
+  vector<vector<array<uint16_t, 1024>>> amp(
+    number_of_boards,
+    vector<array<uint16_t, 1024>>(total_ch)
+  );
+
+  for (int b = 0; b < number_of_boards; b++) {
+    for (int ch = 0; ch < total_ch; ch++) {
+      string bname = Form("amp_b%d_ch%02d", b, ch);
+      tree->Branch(bname.c_str(),
+                   amp[b][ch].data(),
+                   Form("%s[%d]/s", bname.c_str(), sample_n));
+    }
+  }
+  
+  int event_count = 0;
   
   while (true) {
     EventHeader eh;
-    if (!ifs.read(reinterpret_cast<char*>(&eh), sizeof(EventHeader))) break;
+    if (!ifs.read(reinterpret_cast<char*>(&eh), sizeof(EventHeader)))
+      break;
 
-    cout << "========================================" << endl;
-    cout << " Event ID: " << eh.event_id << " (Count: " << ++event_count << ")" << endl;
-    cout << "========================================" << endl;
+    event_count++;
+
+    ev_id = (Long64_t)eh.event_id;
+
+    for (int b = 0; b < number_of_boards; b++)
+      for (int ch = 0; ch < total_ch; ch++)
+        amp[b][ch].fill(0);
 
     BoardHeader bh[number_of_boards];
-    
     for (int b = 0; b < number_of_boards; b++) {
       ifs.read(reinterpret_cast<char*>(&bh[b]), sizeof(BoardHeader));
-
-      cout<<" Board "<<bh[b].board_id<<" payload_size = "<<bh[b].payload_size<<endl;
-
     }
 
     for (int b = 0; b < number_of_boards; b++) {
@@ -111,68 +123,46 @@ int main (int argc, char** argv) {
       vector<uint32_t> v1742_raw(bh[b].payload_size / 4);
       ifs.read(reinterpret_cast<char*>(v1742_raw.data()), bh[b].payload_size);
 
-      cout<<" 1010 + Total Event size "<<hex<<ntohl(v1742_raw[0])<<endl;
-      cout<<" Board ID + Pattern + Mask "<<hex<<ntohl(v1742_raw[1])<<endl;
-      cout<<" Event Counter "<<hex<<ntohl(v1742_raw[2])<<endl;
-      cout<<" Event Time Tag "<<hex<<ntohl(v1742_raw[3])<<endl;
-
       // --- V1742 packet data
       // Main Header (4 words)
       uint32_t group_mask = ntohl(v1742_raw[1]) & 0xF;
       size_t idx = 4; 
 
-      for (int g = 0; g < 4; g++) {
-	if (!(group_mask & (1 << g))) continue;
+      for (int g = 0; g < number_of_groups; g++) {
+	if (!(group_mask & (1 << g)))
+	  continue;
 
-	// 1. Group n Event Description Word (P43)
-	uint32_t grp_desc = ntohl(v1742_raw[idx]); 
-	cout<<" Group "<<g<<" Start index cell / 0 0 FREQ 000 / Size CH0..7 "<<hex<<grp_desc<<endl;
-	idx++; 
+	// Group Event Description Word (P43)
+	uint32_t grp_desc = ntohl(v1742_raw[idx++]); 
 
-
-	// 2. Data Payload (Ch0 - Ch7)
-	vector<vector<uint16_t>> waveforms(8, vector<uint16_t>(sample_n));
+	// Data Payload (Ch0 - Ch7)
 	for (int s_block = 0; s_block < sample_n ; s_block++) {
 	  uint16_t adcs[8];
 	  decode_8_samples(&v1742_raw[idx], adcs); // at certain time and 8 channels
-	  for (int i = 0; i < 8; i++) { //channel
-	    waveforms[i][s_block] = adcs[i];
+	  for (int ich = 0; ich < 8; ich++) { //channel
+	    int global_ch = g * ch_per_group + ich;
+	    amp[b][global_ch][s_block] = adcs[ich];
+	    // cout << "A: [" << global_ch << "]" << s_block << ": " << adcs[ich] << endl;
 	  }
 	  idx += 3;
 	}
-
-	// 3. TRn samples but rel
-	//idx += (3 * sample_n / 8); 
 	
-	// 4. Group n Time Tag 
-	uint32_t grp_time_tag = ntohl(v1742_raw[idx]); 
-	cout<<idx<<" grp_time_tag "<<hex<<grp_time_tag<<endl;
-	idx++;
-	cout<<" index "<<dec<<idx<<endl;
-	// dump the waveform in txt
-	for (int ch = 0; ch < 8; ch++) {
-	  amplitude.clear();
-	  cout <<dec<< "Board" << b << " Group" << g << " ch" << (g * 8 + ch) << endl;
-	  for (int s = 0; s < sample_n; s++) {
-	    //amplitude[b][g * 8 + ch][s] = waveforms[ch][s];
-	    amplitude.push_back(waveforms[ch][s]);
-	    cout << setw(5) << setfill(' ') << waveforms[ch][s] << " ";
-	    if ((s + 1) % 16  == 0) cout << endl;
-	  }
-	  cout << endl;
-	  channelid = g*8 + ch;
-	  boardid = b;
-	}
+	// Group n Time Tag 
+	uint32_t grp_time_tag = ntohl(v1742_raw[idx++]); 
       }
-      tree->Fill();
     }
     // EventTrailer
     EventTrailer et;
     ifs.read(reinterpret_cast<char*>(&et), sizeof(EventTrailer));
+    tree->Fill();
   }
 
+  
+  
   fout->Write();
   fout->Close();
+
+  cout << "Done. " << event_count << " events written." << endl;
 
   return 0;
 }
