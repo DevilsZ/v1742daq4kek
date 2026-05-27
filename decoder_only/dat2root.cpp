@@ -150,8 +150,8 @@ int main (int argc, char** argv) {
 	idx++;
 	cout<<" index "<<dec<<idx<<endl;
 	// dump the waveform in txt
-	amplitude.clear();
 	for (int ch = 0; ch < 8; ch++) {
+	  amplitude.clear();
 	  cout <<dec<< "Board" << b << " Group" << g << " ch" << (g * 8 + ch) << endl;
 	  for (int s = 0; s < sample_n; s++) {
 	    //amplitude[b][g * 8 + ch][s] = waveforms[ch][s];
@@ -162,10 +162,9 @@ int main (int argc, char** argv) {
 	  cout << endl;
 	  channelid = g*8 + ch;
 	  boardid = b;
-	  tree->Fill();
-  
 	}
       }
+      tree->Fill();
     }
     // EventTrailer
     EventTrailer et;
