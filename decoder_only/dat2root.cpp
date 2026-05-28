@@ -106,6 +106,10 @@ int main(int argc, char** argv)
         rootfilename = prefix / rootfilename.filename();
         cout << "Output: " << rootfilename << endl;
     }
+    int max_event = 1000000;
+    if (argc > 3) {
+      max_event = atoi(argv[3]);
+    }
 
     // Open input file
     ifstream ifs(argv[1], ios::binary);
@@ -150,6 +154,9 @@ int main(int argc, char** argv)
 
     while (ReadOneEvent(ifs, event_buf, NUM_BOARDS)) {
 
+        if (event_count > max_event)
+	  break;
+      
         if (event_count % 10000 == 0)
             cout << "Progress: " << event_count << endl;
 

@@ -2,8 +2,8 @@
 
 void Draw(const char* filename) {
 
-  const int n_events    = 10;
-  const int n_boards    = 1;
+  const int n_events    = 25;
+  const int n_boards    = 2;
   const int n_ch        = 32;
   const int sample_n    = 1024;
 
@@ -64,8 +64,8 @@ void Draw(const char* filename) {
         gr->SetLineColor(kBlue + 1);
         gr->SetLineWidth(1);
         gr->Draw("AL");
-	gr->GetYaxis()->SetRangeUser(-900., 100.);
-	gr->GetXaxis()->SetRangeUser(0, 500);
+	gr->GetYaxis()->SetRangeUser(-200., 100.);
+	gr->GetXaxis()->SetRangeUser(0, 300);
       }
 
       c->SaveAs(Form("waveform_ev%03d_b%d.png", iev, b));
