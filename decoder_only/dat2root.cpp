@@ -3,168 +3,184 @@
 #include <fstream>
 #include <iomanip>
 #include <stdint.h>
-#include <arpa/inet.h>
 #include <filesystem>
 
 #include "TFile.h"
 #include "TTree.h"
 
+#include "v1742Event.hpp"
+#include "headers.h"
+
 using namespace std;
 
-#pragma pack(push, 1)
-struct EventHeader {
-  uint32_t marker_begin;
-  uint32_t header_size;
-  uint32_t payload_size;
-  uint64_t event_id;
-  uint64_t sec;
-  uint64_t nsec;
-  uint32_t trigger_counter;
-  uint32_t flags;
-  uint32_t spare;
-};
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+const int NUM_BOARDS   = 2;
+const int NUM_GROUPS   = 4;
+const int CH_PER_GROUP = 8;
+const int TOTAL_CH     = NUM_GROUPS * CH_PER_GROUP; // 32
+const int SAMPLE_N     = 1024;
 
-struct BoardHeader {
-  uint32_t marker_begin;
-  uint32_t header_size;
-  uint32_t payload_size;
-  int board_id;
-};
-
-struct EventTrailer {
-  uint32_t checksum;
-  uint32_t marker_end;
-};
-#pragma pack(pop)
-
-void decode_8_samples(const uint32_t* raw, uint16_t* out_adc) {
-
-  uint32_t w[3];
-
-  for (int i=0;i<3;i++) {
-    w[i] = ntohl(raw[i]);
-  }
-  out_adc[0] =  w[0] & 0xFFF;
-  out_adc[1] = (w[0] >> 12) & 0xFFF;
-  out_adc[2] = ((w[0] >> 24) & 0xFF) | ((w[1] & 0xF) << 8);
-  out_adc[3] = (w[1] >> 4) & 0xFFF;
-  out_adc[4] = (w[1] >> 16) & 0xFFF;
-  out_adc[5] = ((w[1] >> 28) & 0xF) | ((w[2] & 0xFF) << 4);
-  out_adc[6] = (w[2] >> 8) & 0xFFF;
-  out_adc[7] = (w[2] >> 20) & 0xFFF;
-}
-
-int main (int argc, char** argv) {
-  if (argc < 2) {
-    cout << "Usage: ./decoder <raw_data_file>" << endl;
-    return 1;
-  }
-
-  
-  const int number_of_boards = 2;
-  const int number_of_groups = 4;
-  const int ch_per_group     = 8;
-  const int total_ch         = number_of_groups * ch_per_group;
-  const int sample_n = 1024; 
-
-  ifstream ifs(argv[1], ios::binary);
-  if (!ifs) return 1;
-
-  std::filesystem::path rootfilename = argv[1];
-  rootfilename.replace_extension(".root");
-  
-  // ROOT output
-  TFile *fout = new TFile(rootfilename.string().c_str(), "RECREATE");
-  TTree *tree = new TTree("tree", "Waveform tree");
-
-  // TTree Variables
-  Long64_t ev_id;
-  // Branches
-  tree->Branch("ev_id",     &ev_id);
-
-
-  // Amplitude
-  vector<vector<array<uint16_t, 1024>>> amp(
-    number_of_boards,
-    vector<array<uint16_t, 1024>>(total_ch)
-  );
-
-  for (int b = 0; b < number_of_boards; b++) {
-    for (int ch = 0; ch < total_ch; ch++) {
-      string bname = Form("amp_b%d_ch%02d", b, ch);
-      tree->Branch(bname.c_str(),
-                   amp[b][ch].data(),
-                   Form("%s[%d]/s", bname.c_str(), sample_n));
-    }
-  }
-  
-  int event_count = 0;
-  
-  while (true) {
+// ---------------------------------------------------------------------------
+// Read exactly one event from the file into a contiguous buffer.
+//
+// Binary layout on disk:
+//   EventHeader
+//   BoardHeader[0]
+//   BoardHeader[1]
+//   BoardData[0]   (bh[0].payload_size bytes)
+//   BoardData[1]   (bh[1].payload_size bytes)
+//   EventTrailer
+//
+// EventHeader.payload_size counts only the raw board data, NOT the
+// BoardHeaders, so we read the BoardHeaders explicitly first and then
+// compute the true total size.
+//
+// Returns false when EOF is reached or a read fails.
+// ---------------------------------------------------------------------------
+static bool ReadOneEvent(ifstream& ifs, vector<uint8_t>& buf, int num_boards)
+{
+    // 1. Read EventHeader
     EventHeader eh;
     if (!ifs.read(reinterpret_cast<char*>(&eh), sizeof(EventHeader)))
-      break;
+        return false;
 
-    event_count++;
-
-    ev_id = (Long64_t)eh.event_id;
-
-    for (int b = 0; b < number_of_boards; b++)
-      for (int ch = 0; ch < total_ch; ch++)
-        amp[b][ch].fill(0);
-
-    BoardHeader bh[number_of_boards];
-    for (int b = 0; b < number_of_boards; b++) {
-      ifs.read(reinterpret_cast<char*>(&bh[b]), sizeof(BoardHeader));
+    // 2. Read all BoardHeaders upfront
+    vector<BoardHeader> bhs(num_boards);
+    for (int b = 0; b < num_boards; b++) {
+        if (!ifs.read(reinterpret_cast<char*>(&bhs[b]), sizeof(BoardHeader)))
+            return false;
     }
 
-    for (int b = 0; b < number_of_boards; b++) {
-      // V1742 raw data
-      vector<uint32_t> v1742_raw(bh[b].payload_size / 4);
-      ifs.read(reinterpret_cast<char*>(v1742_raw.data()), bh[b].payload_size);
+    // 3. Calculate total buffer size
+    uint32_t board_data_total = 0;
+    for (int b = 0; b < num_boards; b++)
+        board_data_total += bhs[b].payload_size;
 
-      // --- V1742 packet data
-      // Main Header (4 words)
-      uint32_t group_mask = ntohl(v1742_raw[1]) & 0xF;
-      size_t idx = 4; 
+    const uint32_t total = sizeof(EventHeader)
+                         + num_boards * sizeof(BoardHeader)
+                         + board_data_total
+                         + sizeof(EventTrailer);
+    buf.resize(total);
 
-      for (int g = 0; g < number_of_groups; g++) {
-	if (!(group_mask & (1 << g)))
-	  continue;
+    // 4. Assemble: copy already-read headers into buffer
+    uint32_t offset = 0;
+    memcpy(buf.data() + offset, &eh, sizeof(EventHeader));
+    offset += sizeof(EventHeader);
 
-	// Group Event Description Word (P43)
-	uint32_t grp_desc = ntohl(v1742_raw[idx++]); 
-
-	// Data Payload (Ch0 - Ch7)
-	for (int s_block = 0; s_block < sample_n ; s_block++) {
-	  uint16_t adcs[8];
-	  decode_8_samples(&v1742_raw[idx], adcs); // at certain time and 8 channels
-	  for (int ich = 0; ich < 8; ich++) { //channel
-	    int global_ch = g * ch_per_group + ich;
-	    amp[b][global_ch][s_block] = adcs[ich];
-	    // cout << "A: [" << global_ch << "]" << s_block << ": " << adcs[ich] << endl;
-	  }
-	  idx += 3;
-	}
-	
-	// Group n Time Tag 
-	uint32_t grp_time_tag = ntohl(v1742_raw[idx++]); 
-      }
+    for (int b = 0; b < num_boards; b++) {
+        memcpy(buf.data() + offset, &bhs[b], sizeof(BoardHeader));
+        offset += sizeof(BoardHeader);
     }
-    // EventTrailer
-    EventTrailer et;
-    ifs.read(reinterpret_cast<char*>(&et), sizeof(EventTrailer));
-    tree->Fill();
-  }
 
-  
-  
-  fout->Write();
-  fout->Close();
+    // 5. Read board data payloads
+    for (int b = 0; b < num_boards; b++) {
+        if (!ifs.read(reinterpret_cast<char*>(buf.data() + offset),
+                      bhs[b].payload_size))
+            return false;
+        offset += bhs[b].payload_size;
+    }
 
-  cout << "Done. " << event_count << " events written." << endl;
+    // 6. Read EventTrailer
+    if (!ifs.read(reinterpret_cast<char*>(buf.data() + offset),
+                  sizeof(EventTrailer)))
+        return false;
 
-  return 0;
+    return true;
 }
 
+// ---------------------------------------------------------------------------
+int main(int argc, char** argv)
+{
+    if (argc < 2) {
+        cout << "Usage: ./dat2root <raw_data_file> [output_dir]" << endl;
+        return 1;
+    }
+
+    // Determine output file path
+    filesystem::path rootfilename = argv[1];
+    rootfilename.replace_extension(".root");
+    if (argc > 2) {
+        filesystem::path prefix = argv[2];
+        rootfilename = prefix / rootfilename.filename();
+        cout << "Output: " << rootfilename << endl;
+    }
+
+    // Open input file
+    ifstream ifs(argv[1], ios::binary);
+    if (!ifs) {
+        cerr << "Error: Cannot open input file: " << argv[1] << endl;
+        return 1;
+    }
+
+    // Load pedestal tables
+    auto pedestal_tables =
+        V1742Event::LoadPedestalFiles(NUM_BOARDS, "pedestal_def");
+
+    // Initialize parser
+    V1742Event parser;
+    parser.SetSamples(SAMPLE_N);
+    parser.SetNumberOfBoards(NUM_BOARDS);
+
+    // ROOT output
+    TFile* fout = new TFile(rootfilename.string().c_str(), "RECREATE");
+    TTree* tree = new TTree("tree", "Pedestal-corrected");
+
+    Long64_t ev_id;
+    tree->Branch("ev_id", &ev_id);
+
+    // Branch arrays: float (pedestal-corrected), one per board x channel
+    vector<vector<array<float, SAMPLE_N>>> amp(
+        NUM_BOARDS,
+        vector<array<float, SAMPLE_N>>(TOTAL_CH)
+    );
+    for (int b = 0; b < NUM_BOARDS; b++) {
+        for (int ch = 0; ch < TOTAL_CH; ch++) {
+            string bname = Form("amp_b%d_ch%02d", b, ch);
+            tree->Branch(bname.c_str(),
+                         amp[b][ch].data(),
+                         Form("%s[%d]/F", bname.c_str(), SAMPLE_N));
+        }
+    }
+
+    // Event loop
+    int event_count = 0;
+    vector<uint8_t> event_buf;
+
+    while (ReadOneEvent(ifs, event_buf, NUM_BOARDS)) {
+
+        if (event_count % 10000 == 0)
+            cout << "Progress: " << event_count << endl;
+
+        int parsed = parser.Parse(event_buf.data(),
+                                  static_cast<uint32_t>(event_buf.size()));
+        if (parsed <= 0) {
+            cerr << "Warning: Parse failed at event " << event_count
+                 << " (ret=" << parsed << "). Skipping." << endl;
+            event_count++;
+            continue;
+        }
+
+        parser.ApplyPedestalCorrection(pedestal_tables);
+
+        ev_id = static_cast<Long64_t>(parser.GetEventHeader().event_id);
+
+        for (int b = 0; b < NUM_BOARDS; b++)
+            for (int ch = 0; ch < TOTAL_CH; ch++)
+                for (int s = 0; s < SAMPLE_N; s++)
+                    amp[b][ch][s] = parser.GetCorrectedWaveform(b, ch, s);
+
+        tree->Fill();
+        event_count++;
+    }
+
+    fout->Write();
+    fout->Close();
+
+    cout << "Done. " << event_count << " events written to "
+         << rootfilename << endl;
+
+    return 0;
+}
 
