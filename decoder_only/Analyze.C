@@ -308,7 +308,7 @@ void Analyze(const char* filename, const char* run_number = "00000") {
 				  PX_BINS,PX_COL_LO,PX_COL_HI);
     hPixelSumToTs[l]   = new TH1F(Form("hPixelSumToTs_l%d",l),
 				  Form("Pixel %s: Sum ToTs;ToT[a.u.];Entries",LAYER_NAMES[1][l]),
-				  100,0,400);
+				  1600,0,8000);
   }
   hPixelCorFrontBack = new TH2F("hPixelCorFrontBack",
 				"Pixel: Front col vs Back col centroid;Front col;Back col",
@@ -366,11 +366,13 @@ void Analyze(const char* filename, const char* run_number = "00000") {
     std::vector<PulseShape> pulses_all[NBOARDS][N_CH];
     bool  ch_hit[NBOARDS][N_CH]; // Hit flag
     float ch_min[NBOARDS][N_CH]; // Store maximum ToT
+    float ch_charge[NBOARDS][N_CH]; // Store maximum charge
     for (int b = 0; b < NBOARDS; b++) {
       for (int ch = 0; ch < N_CH; ch++) {
 	// Init flags
 	ch_hit[b][ch] = false;
         ch_min[b][ch] = 0.0f;
+        ch_charge[b][ch] = 0.0f;
         if (DEAD_CH[b].count(ch))
 	  continue;
 	// Get waveform from samling
@@ -381,6 +383,11 @@ void Analyze(const char* filename, const char* run_number = "00000") {
         for (const auto& p : pulses_all[b][ch]) {
 	  if (ch_min[b][ch] < p.tot)
 	    ch_min[b][ch] = p.tot;
+	  if (ch_charge[b][ch] < p.charge)
+	    ch_charge[b][ch] = p.charge;
+
+
+	  
           hMinAmp_ch  [b][ch]->Fill(p.min_adc);
           hPedestal_ch[b][ch]->Fill(p.pedestal);
           hTlead_ch   [b][ch]->Fill(p.t_lead);
@@ -495,7 +502,7 @@ void Analyze(const char* filename, const char* run_number = "00000") {
         if (!ch_hit[1][ch]) continue;
         // ch_min stores max ToT for each channel (set in Step 1)
         if (ch_min[1][ch] > min_tot[1][l])
-          sumToT += ch_min[1][ch];
+          sumToT += ch_charge[1][ch];
       }
       if (sumToT > 0.0)
         hPixelSumToTs[l]->Fill(sumToT);
