@@ -610,8 +610,8 @@ void Analyze(const char* filename) {
         if (!ch_hit[1][ch]) continue;
         // ch_min stores max ToT for each channel (set in Step 1)
         if (ch_min[1][ch] > min_tot[1][l]) {
-          //sumToT += ch_min[1][ch];
-	  sumToT += ch_charge[1][ch];
+          sumToT += ch_min[1][ch];
+	  //sumToT += ch_charge[1][ch];
 	}
       }
       if (sumToT > 0.0)
