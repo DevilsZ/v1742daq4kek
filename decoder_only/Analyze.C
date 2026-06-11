@@ -156,9 +156,9 @@ void Analyze(const char* filename) {
   const int PIXEL_NROW = 4;
   const int PIXEL_NCOL = 4;
   const int mapping_row[16] = {3, 3, 2, 2, 1, 1, 0, 0,
-                                0, 0, 1, 1, 2, 2, 3, 3};
+			       0, 0, 1, 1, 2, 2, 3, 3};
   const int mapping_col[16] = {1, 0, 1, 0, 1, 0, 1, 0,
-                                3, 2, 3, 2, 3, 2, 3, 2};
+			       3, 2, 3, 2, 3, 2, 3, 2};
 
   const float min_tot[NBOARDS][4] = {
     {2.0, 2.0, 2.0, 2.0},
@@ -230,7 +230,7 @@ void Analyze(const char* filename) {
 				     100,0.,25.*SAMPLING_INTERVAL);
       hCharge_ch[b][ch]   = new TH1F(Form("hCharge_b%d_ch%02d",b,ch),
 				     Form("%s Ch%02d charge;Charge [ADC*s];Entries",BOARD_NAMES[b],ch),
-				     200,0.,500.*SAMPLING_INTERVAL);
+				     200,0.,4000.*SAMPLING_INTERVAL);
     }
   }
 
