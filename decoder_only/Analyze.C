@@ -59,7 +59,8 @@ std::vector<PulseShape> AnalyzeWaveform(const Float_t* amp,
         float frac = (threshold - val_prev) / (val - val_prev);
         t_cross = (s - 1 + frac) * sampling_interval;
       }
-      t_lead = t_cross; charge_acc = 0.0f;
+      t_lead = t_cross;
+      charge_acc = 0.0f;
       min_adc = val;
       in_pulse = true;
     }
@@ -120,7 +121,7 @@ void Analyze(const char* filename) {
   const int   NBOARDS           = 2;
   const int   N_CH              = 32;
   const int   SAMPLE_N          = 1024;
-  const float THRESHOLD         = -10.0f;
+  const float THRESHOLD         = -50.0f;
   const float SAMPLING_INTERVAL = 1.0f;
   const int   MAX_LAYERS        = 4;
   const int   reso_factor       = 4;
