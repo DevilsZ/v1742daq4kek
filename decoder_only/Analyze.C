@@ -191,6 +191,10 @@ void Analyze(const char* filename) {
     return;
   }
 
+  TString outname = Form("out_run%s.root", run_number);
+  TFile* fout = TFile::Open(outname, "RECREATE");
+  fout->cd();
+
   Long64_t ev_id;
   tree->SetBranchAddress("ev_id", &ev_id);
 
@@ -347,6 +351,71 @@ void Analyze(const char* filename) {
   }
 
   // -----------------------------------------------------------------------
+  // Output TTree: pulse_tree
+  // One entry per event.  For each channel the per-pulse quantities are
+  // stored as std::vector<float> so multi-pulse events are handled.
+  //
+  // Channel grouping (global ch on each board):
+  //   pulse_strip_front_x  : Board 0, ch  0– 7  (local ch 0–7)
+  //   pulse_strip_front_y  : Board 0, ch  8–15  (local ch 0–7)
+  //   pulse_strip_rear_x   : Board 0, ch 16–23  (local ch 0–7)
+  //   pulse_strip_rear_y   : Board 0, ch 24–31  (local ch 0–7)
+  //   pulse_pixel_front    : Board 1, ch  0–15  (local ch 0–15)
+  //   pulse_pixel_rear     : Board 1, ch 16–31  (local ch 0–15)
+  //
+  // Branch naming: <group>_ch<localch>_<quantity>
+  // Quantities: tot, t_lead, charge, min_adc, pedestal, n_pulses (Int_t)
+  // -----------------------------------------------------------------------
+
+  // Group definitions: { board, global_ch_start, n_channels, name }
+  struct GroupDef {
+    int         board;
+    int         ch_start;   // global ch index on the board
+    int         n_ch;
+    const char* name;
+  };
+  const GroupDef GROUPS[] = {
+    { 0,  0,  8, "pulse_strip_front_x" },
+    { 0,  8,  8, "pulse_strip_front_y" },
+    { 0, 16,  8, "pulse_strip_rear_x"  },
+    { 0, 24,  8, "pulse_strip_rear_y"  },
+    { 1,  0, 16, "pulse_pixel_front"   },
+    { 1, 16, 16, "pulse_pixel_rear"    },
+  };
+  const int numGROUPS = 6; //sizeof(GROUPS) / sizeof(GROUPS[0]);
+
+  // Maximum channels per group (pixel groups have 16)
+  const int MAX_CH_PER_GROUP = 16;
+
+  // Branch variables: [group][local_ch]
+  // Using vectors-of-vectors: outer = group*MAX_CH, inner = pulses in event
+  // We store them as flat arrays of std::vector<float> and connect via SetBranchAddress.
+  // Layout: pulse_vars[group_idx][local_ch]
+  std::vector<float> pv_tot      [numGROUPS][MAX_CH_PER_GROUP];
+  std::vector<float> pv_t_lead   [numGROUPS][MAX_CH_PER_GROUP];
+  std::vector<float> pv_charge   [numGROUPS][MAX_CH_PER_GROUP];
+  std::vector<float> pv_min_adc  [numGROUPS][MAX_CH_PER_GROUP];
+  std::vector<float> pv_pedestal [numGROUPS][MAX_CH_PER_GROUP];
+  Int_t              pv_npulses  [numGROUPS][MAX_CH_PER_GROUP];
+  Long64_t           pv_ev_id;
+
+  fout->cd();
+  TTree* pulse_tree = new TTree("pulse_tree", "Per-channel pulse data");
+  pulse_tree->Branch("ev_id", &pv_ev_id, "ev_id/L");
+
+  for (int g = 0; g < numGROUPS; g++) {
+    const GroupDef& gd = GROUPS[g];
+    for (int lch = 0; lch < gd.n_ch; lch++) {
+      pulse_tree->Branch(Form("%s_ch%02d_n",        gd.name, lch), &pv_npulses [g][lch], Form("%s_ch%02d_n/I",  gd.name, lch));
+      pulse_tree->Branch(Form("%s_ch%02d_tot",      gd.name, lch), &pv_tot     [g][lch]);
+      pulse_tree->Branch(Form("%s_ch%02d_t_lead",   gd.name, lch), &pv_t_lead  [g][lch]);
+      pulse_tree->Branch(Form("%s_ch%02d_charge",   gd.name, lch), &pv_charge  [g][lch]);
+      pulse_tree->Branch(Form("%s_ch%02d_min_adc",  gd.name, lch), &pv_min_adc [g][lch]);
+      pulse_tree->Branch(Form("%s_ch%02d_pedestal", gd.name, lch), &pv_pedestal[g][lch]);
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Event loop (pass 1): fill per-ch histos, store data for correction
   // -----------------------------------------------------------------------
   const Long64_t n_entries = tree->GetEntries();
@@ -368,6 +437,20 @@ void Analyze(const char* filename) {
     if (iev % 10000 == 0)
       cout << "  Event " << iev << " / " << n_entries << endl;
     tree->GetEntry(iev);
+
+    // ---- Clear pulse_tree branch vectors for this event ----
+    pv_ev_id = ev_id;
+    for (int g = 0; g < numGROUPS; g++) {
+      const GroupDef& gd = GROUPS[g];
+      for (int lch = 0; lch < gd.n_ch; lch++) {
+        pv_tot     [g][lch].clear();
+        pv_t_lead  [g][lch].clear();
+        pv_charge  [g][lch].clear();
+        pv_min_adc [g][lch].clear();
+        pv_pedestal[g][lch].clear();
+        pv_npulses [g][lch] = 0;
+      }
+    }
 
     // ---- Step 1: compute pulses for all channels ----
     std::vector<PulseShape> pulses_all[NBOARDS][N_CH];
@@ -403,6 +486,24 @@ void Analyze(const char* filename) {
         }
       }
     }
+
+    // ---- Fill pulse_tree vectors from pulses_all ----
+    // Map global ch on each board back to the group and local ch index.
+    for (int g = 0; g < numGROUPS; g++) {
+      const GroupDef& gd = GROUPS[g];
+      for (int lch = 0; lch < gd.n_ch; lch++) {
+        int gch = gd.ch_start + lch;   // global ch index on this board
+        for (const auto& p : pulses_all[gd.board][gch]) {
+          pv_tot     [g][lch].push_back(p.tot);
+          pv_t_lead  [g][lch].push_back(p.t_lead);
+          pv_charge  [g][lch].push_back(p.charge);
+          pv_min_adc [g][lch].push_back(p.min_adc);
+          pv_pedestal[g][lch].push_back(p.pedestal);
+        }
+        pv_npulses[g][lch] = (Int_t)pulses_all[gd.board][gch].size();
+      }
+    }
+    pulse_tree->Fill();
 
     // ---- Step 2: Strip layer analysis ----
     int    n_layers_hit_strip = 0;
@@ -725,15 +826,20 @@ void Analyze(const char* filename) {
     cerr << "Cannot create output file: " << outname << endl;
   }
   */
-  TString outname = Form("out_run%s.root", run_number);
-  TFile* fout = TFile::Open(outname, "RECREATE");
+
+
   TIter next(gDirectory->GetList());
   TObject* obj;
 
   while ((obj = next())) {
+    cout << obj->GetName() << endl;
     obj->Write();
   }
 
+  // pulse_tree is already in fout; Write() above covers it,
+  // but call explicitly to be safe with large trees.
+  pulse_tree->Write("", TObject::kOverwrite);
+  
   fout->Close();
 
   cout << "Done. Plots saved." << endl;
