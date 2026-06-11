@@ -112,7 +112,7 @@ struct SixLayerData {
 // -----------------------------------------------------------------------
 // Analyze
 // -----------------------------------------------------------------------
-void Analyze(const char* filename, const char* run_number = "00000") {
+void Analyze(const char* filename) {
 
   // -----------------------------------------------------------------------
   // Configuration
@@ -173,11 +173,18 @@ void Analyze(const char* filename, const char* run_number = "00000") {
   // -----------------------------------------------------------------------
   // Open file / tree
   // -----------------------------------------------------------------------
+
   TFile* f = TFile::Open(filename);
   if (!f || f->IsZombie()) {
     cerr << "Cannot open: " << filename << endl;
     return;
   }
+  // Get run_number for filename
+  char run_number[32];
+  sscanf(filename, "run_%[^.].root", run_number);
+
+  cout << "Run number:" << run_number << endl;
+  
   TTree* tree = (TTree*)f->Get("tree");
   if (!tree) {
     cerr << "TTree 'tree' not found." << endl;
@@ -468,7 +475,7 @@ void Analyze(const char* filename, const char* run_number = "00000") {
     int    n_layers_hit_pixel = 0;
     double pix_centroid_row[2] = {-1.0, -1.0};
     double pix_centroid_col[2] = {-1.0, -1.0};
-
+  
     for (int l = 0; l < N_LAYERS[1]; l++) {
       int    n_hit = 0;
       double wsum  = 0.0, rsum = 0.0, csum = 0.0;
@@ -494,15 +501,16 @@ void Analyze(const char* filename, const char* run_number = "00000") {
       }
 
       // --- sumToT: threshold-passing channels only ---
-      // ch_min[1][ch] stores the maximum ToT of the channel (reused as weight above).
       // Sum over all hit channels in this layer whose ToT exceeds min_tot[1][l].
       double sumToT = 0.0;
       for (int i = 0; i < CH_PER_LAYER[1]; i++) {
         int ch = LAYER_START[1][l] + i;
         if (!ch_hit[1][ch]) continue;
         // ch_min stores max ToT for each channel (set in Step 1)
-        if (ch_min[1][ch] > min_tot[1][l])
-          sumToT += ch_charge[1][ch];
+        if (ch_min[1][ch] > min_tot[1][l]) {
+          //sumToT += ch_min[1][ch];
+	  sumToT += ch_charge[1][ch];
+	}
       }
       if (sumToT > 0.0)
         hPixelSumToTs[l]->Fill(sumToT);
@@ -583,18 +591,23 @@ void Analyze(const char* filename, const char* run_number = "00000") {
     TCanvas* c = new TCanvas(cname, h->GetTitle(), 800*reso_factor, 600*reso_factor);
     if (logy) gPad->SetLogy();
     h->SetLineColor(kRed+1);
-    if (auto h1 = dynamic_cast<TH1F*>(h)) h1->SetFillColorAlpha(kRed,0.3);
-    h->Draw(); c->SaveAs(outpng); delete c;
+    if (auto h1 = dynamic_cast<TH1F*>(h))
+      h1->SetFillColorAlpha(kRed,0.3);
+    h->Draw(); c->SaveAs(outpng); 
+    delete c;
   };
 
   auto DrawPerCh = [&](TH1F** harr, const char* cname, const char* outpng, bool logy=false) {
     TCanvas* c = new TCanvas(cname, cname, 1600*reso_factor, 1200*reso_factor);
     c->Divide(8, 4);
     for (int ch = 0; ch < N_CH; ch++) {
-      c->cd(ch+1); if (logy) gPad->SetLogy();
-      harr[ch]->SetLineColor(kBlue+1); harr[ch]->Draw();
+      c->cd(ch+1);
+      if (logy) gPad->SetLogy();
+      harr[ch]->SetLineColor(kBlue+1);
+      harr[ch]->Draw();
     }
-    c->SaveAs(outpng); delete c;
+    c->SaveAs(outpng); 
+    delete c;
   };
 
   auto DrawPerLayer = [&](TH1F** harr, int nlayers, const char* cname,
@@ -602,18 +615,23 @@ void Analyze(const char* filename, const char* run_number = "00000") {
     TCanvas* c = new TCanvas(cname, cname, 1200*reso_factor, 400*reso_factor);
     c->Divide(nlayers, 1);
     for (int l = 0; l < nlayers; l++) {
-      c->cd(l+1); if (logy) gPad->SetLogy();
+      c->cd(l+1);
+      if (logy) gPad->SetLogy();
       harr[l]->SetLineColor(kGreen+2);
       harr[l]->SetFillColorAlpha(kGreen+1, 0.3);
       harr[l]->Draw();
     }
-    c->SaveAs(outpng); delete c;
+    c->SaveAs(outpng); 
+    delete c;
   };
 
   auto DrawCorr2D = [&](TH2F* h, const char* cname, const char* outpng) {
     TCanvas* c = new TCanvas(cname, h->GetTitle(), 800*reso_factor, 700*reso_factor);
-    gPad->SetRightMargin(0.15); h->SetStats(0); h->Draw("COLZ");
-    c->SaveAs(outpng); delete c;
+    gPad->SetRightMargin(0.15);
+    h->SetStats(0);
+    h->Draw("COLZ");
+    c->SaveAs(outpng); 
+    delete c;
   };
 
   auto DrawSideBySide2D = [&](TH2F* h1, TH2F* h2, const char* cname, const char* outpng) {
@@ -621,7 +639,8 @@ void Analyze(const char* filename, const char* run_number = "00000") {
     c->Divide(2,1);
     c->cd(1); gPad->SetRightMargin(0.15); h1->SetStats(0); h1->Draw("COLZ");
     c->cd(2); gPad->SetRightMargin(0.15); h2->SetStats(0); h2->Draw("COLZ");
-    c->SaveAs(outpng); delete c;
+    c->SaveAs(outpng); 
+    delete c;
   };
 
   // -----------------------------------------------------------------------
@@ -629,49 +648,51 @@ void Analyze(const char* filename, const char* run_number = "00000") {
   // -----------------------------------------------------------------------
   for (int b = 0; b < NBOARDS; b++) {
     const char* bn = BOARD_NAMES[b];
-    DrawPerCh(hMinAmp_ch  [b], Form("c_minamp_b%d",  b), Form("%s_minamp_per_ch.png",  bn), true);
-    DrawPerCh(hPedestal_ch[b], Form("c_pedestal_b%d",b), Form("%s_pedestal_per_ch.png",bn));
-    DrawPerCh(hTlead_ch   [b], Form("c_tlead_b%d",   b), Form("%s_tlead_per_ch.png",   bn));
-    DrawPerCh(hToT_ch     [b], Form("c_tot_b%d",     b), Form("%s_tot_per_ch.png",     bn));
-    DrawPerCh(hCharge_ch  [b], Form("c_charge_b%d",  b), Form("%s_charge_per_ch.png",  bn));
-    DrawSingle(hNLayers[b],    Form("c_nlayers_b%d",b),   Form("%s_n_layers_hit.png",  bn));
+    DrawPerCh(hMinAmp_ch  [b], Form("c_minamp_b%d",  b), Form("%s_minamp_per_ch_run%s.png",  bn, run_number), true);
+    DrawPerCh(hPedestal_ch[b], Form("c_pedestal_b%d",b), Form("%s_pedestal_per_ch_run%s.png",bn, run_number));
+    DrawPerCh(hTlead_ch   [b], Form("c_tlead_b%d",   b), Form("%s_tlead_per_ch_run%s.png",   bn, run_number));
+    DrawPerCh(hToT_ch     [b], Form("c_tot_b%d",     b), Form("%s_tot_per_ch_run%s.png",     bn, run_number));
+    DrawPerCh(hCharge_ch  [b], Form("c_charge_b%d",  b), Form("%s_charge_per_ch_run%s.png",  bn, run_number));
+    DrawSingle(hNLayers[b],    Form("c_nlayers_b%d",b),   Form("%s_n_layers_hit_run%s.png",  bn, run_number));
   }
-  DrawSingle(hNLayers_total, "c_nlayers_total", "n_layers_hit_total.png");
+  DrawSingle(hNLayers_total, "c_nlayers_total", Form("n_layers_hit_total_run%s.png", run_number));
 
   // Strip
-  DrawPerLayer(hNHitCh_strip,   N_LAYERS[0], "c_nhitCh_strip",   "Strip_nhit_ch_per_layer.png");
-  DrawPerLayer(hCentroid_strip,  N_LAYERS[0], "c_centroid_strip",  "Strip_centroid_per_layer.png");
-  DrawPerLayer(hLead_ch,         N_LAYERS[0], "c_lead_strip",      "Strip_leading_strip.png");
-  DrawPerLayer(hSubLead_ch,      N_LAYERS[0], "c_sublead_strip",   "Strip_subleading_strip.png");
+  DrawPerLayer(hNHitCh_strip,    N_LAYERS[0], "c_nhitCh_strip",   Form("Strip_nhit_ch_per_layer_run%s.png", run_number));
+  DrawPerLayer(hCentroid_strip,  N_LAYERS[0], "c_centroid_strip",  Form("Strip_centroid_per_layer_run%s.png", run_number));
+  DrawPerLayer(hLead_ch,         N_LAYERS[0], "c_lead_strip",      Form("Strip_leading_strip_run%s.png", run_number));
+  DrawPerLayer(hSubLead_ch,      N_LAYERS[0], "c_sublead_strip",   Form("Strip_subleading_strip_run%s.png", run_number));
 
-  DrawSideBySide2D(hCorX_strip, hCorY_strip,           "c_cor_strip_raw",  "Strip_correlation_raw.png");
-  DrawSideBySide2D(hCorX_strip_corr, hCorY_strip_corr, "c_cor_strip_corr", "Strip_correlation_corrected.png");
+  DrawSideBySide2D(hCorX_strip, hCorY_strip,           "c_cor_strip_raw",  Form("Strip_correlation_raw_run%s.png", run_number));
+  DrawSideBySide2D(hCorX_strip_corr, hCorY_strip_corr, "c_cor_strip_corr", Form("Strip_correlation_corrected_run%s.png", run_number));
 
   {
     TCanvas* cRs = new TCanvas("c_resid_strip","Strip residuals",1600*reso_factor,600*reso_factor);
     cRs->Divide(4,1);
-    auto dr = [&](int p, TH1F* h){ cRs->cd(p); h->SetLineColor(kBlue+1); h->Draw(); };
-    dr(1,hResid_strip_X); dr(2,hResid_strip_Y);
-    dr(3,hResid_strip_X_corr); dr(4,hResid_strip_Y_corr);
-    cRs->SaveAs("Strip_residuals_front_back.png"); delete cRs;
+    auto dr = [&](int p, TH1F* h) {
+      cRs->cd(p);
+      h->SetLineColor(kBlue+1);
+      h->Draw();
+    };
+    dr(1,hResid_strip_X);
+    dr(2,hResid_strip_Y);
+    dr(3,hResid_strip_X_corr);
+    dr(4,hResid_strip_Y_corr);
+    cRs->SaveAs(Form("Strip_residuals_front_back_run%s.png", run_number)); 
+    delete cRs;
   }
 
   // Pixel occupancy
   for (int l = 0; l < N_LAYERS[1]; l++) {
-    DrawCorr2D(hPixelOcc[l],
-	       Form("c_pixocc_l%d",l), Form("Pixel_%s_occupancy.png",LAYER_NAMES[1][l]));
-    DrawSingle(hPixelCentRow[l],
-	       Form("c_pixrow_l%d",l), Form("Pixel_%s_centroid_row.png",LAYER_NAMES[1][l]));
-    DrawSingle(hPixelCentCol[l],
-	       Form("c_pixcol_l%d",l), Form("Pixel_%s_centroid_col.png",LAYER_NAMES[1][l]));
+    DrawCorr2D(hPixelOcc[l],     Form("c_pixocc_l%d",l), Form("Pixel_%s_occupancy_run%s.png",LAYER_NAMES[1][l], run_number));
+    DrawSingle(hPixelCentRow[l], Form("c_pixrow_l%d",l), Form("Pixel_%s_centroid_row_run%s.png",LAYER_NAMES[1][l], run_number));
+    DrawSingle(hPixelCentCol[l], Form("c_pixcol_l%d",l), Form("Pixel_%s_centroid_col_run%s.png",LAYER_NAMES[1][l], run_number));
   }
-  DrawCorr2D(hPixelCorFrontBack, "c_pix_fb", "Pixel_Front_vs_Back_col.png");
+  DrawCorr2D(hPixelCorFrontBack, "c_pix_fb", Form("Pixel_Front_vs_Back_col_run%s.png", run_number));
 
   // Extrap vs Pixel (6-layer events, corrected strip positions)
-  DrawSideBySide2D(hExtrapX_vs_Col[0], hExtrapX_vs_Col[1],
-		   "c_extrap_x_vs_col", "extrap_X_vs_pixel_col.png");
-  DrawSideBySide2D(hExtrapY_vs_Row[0], hExtrapY_vs_Row[1],
-		   "c_extrap_y_vs_row", "extrap_Y_vs_pixel_row.png");
+  DrawSideBySide2D(hExtrapX_vs_Col[0], hExtrapX_vs_Col[1], "c_extrap_x_vs_col", Form("extrap_X_vs_pixel_col_run%s.png", run_number));
+  DrawSideBySide2D(hExtrapY_vs_Row[0], hExtrapY_vs_Row[1], "c_extrap_y_vs_row", Form("extrap_Y_vs_pixel_row_run%s.png", run_number));
 
   {
     TCanvas* cRp = new TCanvas("c_resid_extrap","Extrap residuals",1600*reso_factor,800*reso_factor);
@@ -679,23 +700,22 @@ void Analyze(const char* filename, const char* run_number = "00000") {
     auto dr = [&](int p, TH1F* h){ cRp->cd(p); h->SetLineColor(kMagenta+1); h->Draw(); };
     dr(1,hResidX_extrap[0]); dr(2,hResidY_extrap[0]);
     dr(3,hResidX_extrap[1]); dr(4,hResidY_extrap[1]);
-    cRp->SaveAs("residuals_extrap_vs_pixel.png"); delete cRp;
+    cRp->SaveAs(Form("residuals_extrap_vs_pixel_run%s.png", run_number));
+    delete cRp;
   }
 
   // -----------------------------------------------------------------------
   // Draw sumToT histograms (PNG)
   // -----------------------------------------------------------------------
-  DrawPerLayer(hPixelSumToTs, N_LAYERS[1], "c_sumtot_pixel",
-               "Pixel_sumToT_per_layer.png");
+  DrawPerLayer(hPixelSumToTs, N_LAYERS[1], "c_sumtot_pixel", "Pixel_sumToT_per_layer_run%s.png");
 
   // -----------------------------------------------------------------------
   // Save hPixelSumToTs to ROOT file:  out_run<run_number>.root
   // -----------------------------------------------------------------------
-  TString outname = Form("out_run%s.root", run_number);
+  /*  TString outname = Form("out_run%s.root", run_number);
   TFile* fout = TFile::Open(outname, "RECREATE");
   if (fout && !fout->IsZombie()) {
     for (int l = 0; l < N_LAYERS[1]; l++) {
-      // Run番号をヒストグラム名に埋め込む
       hPixelSumToTs[l]->SetName(Form("hPixelSumToTs_run%s_l%d", run_number, l));
       hPixelSumToTs[l]->Write();
     }
@@ -704,6 +724,17 @@ void Analyze(const char* filename, const char* run_number = "00000") {
   } else {
     cerr << "Cannot create output file: " << outname << endl;
   }
+  */
+  TString outname = Form("out_run%s.root", run_number);
+  TFile* fout = TFile::Open(outname, "RECREATE");
+  TIter next(gDirectory->GetList());
+  TObject* obj;
+
+  while ((obj = next())) {
+    obj->Write();
+  }
+
+  fout->Close();
 
   cout << "Done. Plots saved." << endl;
   f->Close();
