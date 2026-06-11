@@ -2,7 +2,7 @@
 
 void Draw(const char* filename) {
 
-  const int n_events    = 25;
+  const int n_events    = 10000;
   const int n_boards    = 2;
   const int n_ch        = 32;
   const int sample_n    = 1024;
@@ -13,6 +13,10 @@ void Draw(const char* filename) {
     return;
   }
 
+  // Get run number
+  char run_number[32];
+  sscanf(filename, "%[^.].root", run_number);
+  
   TTree* tree = (TTree*)f->Get("tree");
   if (!tree) {
     cerr << "TTree 'tree' not found." << endl;
@@ -39,20 +43,21 @@ void Draw(const char* filename) {
   // 
   int n_draw = min((Long64_t)n_events, tree->GetEntries());
 
+  TCanvas* c[2];
+
+  for (int b = 0; b < n_boards; b++) {
+    c[b] = new TCanvas(Form("c_b%d", b),
+		       Form("Board %d", b),
+		       1600, 1200);
+    c[b]->Divide(8, 4);
+  }
+
   for (int iev = 0; iev < n_draw; iev++) {
     tree->GetEntry(iev);
 
     for (int b = 0; b < n_boards; b++) {
-
-      TCanvas* c = new TCanvas(
-        Form("c_ev%d_b%d", iev, b),
-        Form("Event %lld  Board %d", ev_id, b),
-        1600, 1200
-      );
-      c->Divide(8, 4);
-
       for (int ch = 0; ch < n_ch; ch++) {
-        c->cd(ch + 1);
+        c[b]->cd(ch + 1);
         gPad->SetMargin(0.12, 0.05, 0.12, 0.08);
 
         double y[sample_n];
@@ -63,13 +68,18 @@ void Draw(const char* filename) {
         gr->SetTitle(Form("b%d ch%02d ev%lld;Sample;ADC", b, ch, ev_id));
         gr->SetLineColor(kBlue + 1);
         gr->SetLineWidth(1);
-        gr->Draw("AL");
+	if (iev==0)
+	  gr->Draw("AL");
+	else
+	  gr->Draw("Lsame");
 	gr->GetYaxis()->SetRangeUser(-200., 100.);
-	gr->GetXaxis()->SetRangeUser(0, 300);
+	gr->GetXaxis()->SetRangeUser(0, 1024);
       }
-
-      c->SaveAs(Form("waveform_ev%03d_b%d.png", iev, b));
     }
+  }
+
+  for (int b = 0; b < n_boards; b++) {
+    c[b]->SaveAs(Form("waveform_%s_b%d.png", run_number, b));
   }
 
   cout << "Done. " << n_draw << " events plotted." << endl;
