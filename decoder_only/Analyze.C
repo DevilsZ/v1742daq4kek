@@ -304,6 +304,7 @@ void Analyze(const char* filename) {
   TH1F* hPixelCentRow  [2];
   TH1F* hPixelCentCol  [2];
   TH1F* hPixelSumToTs  [2];
+  TH1F* hPixelSumCharges [2];
   TH2F* hPixelCorFrontBack;
   for (int l = 0; l < N_LAYERS[1]; l++) {
     hNHitCh_pixel[l]   = new TH1F(Form("hNHitCh_pixel_l%d",l),
@@ -321,6 +322,9 @@ void Analyze(const char* filename) {
     hPixelSumToTs[l]   = new TH1F(Form("hPixelSumToTs_l%d",l),
 				  Form("Pixel %s: Sum ToTs;ToT[a.u.];Entries",LAYER_NAMES[1][l]),
 				  1600,0,8000);
+    hPixelSumCharges[l]   = new TH1F(Form("hPixelSumCharges_l%d",l),
+				     Form("Pixel %s: Sum Charges;ToT[a.u.];Entries",LAYER_NAMES[1][l]),
+				     1600,0,8000);
   }
   hPixelCorFrontBack = new TH2F("hPixelCorFrontBack",
 				"Pixel: Front col vs Back col centroid;Front col;Back col",
@@ -476,8 +480,6 @@ void Analyze(const char* filename) {
 	    ch_min[b][ch] = p.tot;
 	  if (ch_charge[b][ch] < p.charge)
 	    ch_charge[b][ch] = p.charge;
-
-
 	  
           hMinAmp_ch  [b][ch]->Fill(p.min_adc);
           hPedestal_ch[b][ch]->Fill(p.pedestal);
@@ -605,17 +607,24 @@ void Analyze(const char* filename) {
       // --- sumToT: threshold-passing channels only ---
       // Sum over all hit channels in this layer whose ToT exceeds min_tot[1][l].
       double sumToT = 0.0;
+      double sumCharge = 0.0;
       for (int i = 0; i < CH_PER_LAYER[1]; i++) {
         int ch = LAYER_START[1][l] + i;
-        if (!ch_hit[1][ch]) continue;
+        if (!ch_hit[1][ch])
+	  continue;
         // ch_min stores max ToT for each channel (set in Step 1)
         if (ch_min[1][ch] > min_tot[1][l]) {
           sumToT += ch_min[1][ch];
-	  //sumToT += ch_charge[1][ch];
+	  sumCharge += ch_charge[1][ch];
 	}
       }
       if (sumToT > 0.0)
         hPixelSumToTs[l]->Fill(sumToT);
+
+      if (sumCharge > 0.0)
+	hPixelSumCharges[l]->Fill(sumCharge);
+	
+      
     }
 
     hNLayers[1]->Fill(n_layers_hit_pixel);
