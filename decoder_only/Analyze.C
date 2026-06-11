@@ -162,7 +162,7 @@ void Analyze(const char* filename) {
 
   const float min_tot[NBOARDS][4] = {
     {2.0, 2.0, 2.0, 2.0},
-    {1.5, 1.5, 1.5, 1.5}
+    {2.0, 2.0, 2.0, 2.0}
   };
   
   // Dead channel list per board (global ch index within the board)
@@ -809,7 +809,7 @@ void Analyze(const char* filename) {
   // -----------------------------------------------------------------------
   // Draw sumToT histograms (PNG)
   // -----------------------------------------------------------------------
-  DrawPerLayer(hPixelSumToTs, N_LAYERS[1], "c_sumtot_pixel", "Pixel_sumToT_per_layer_run%s.png");
+  DrawPerLayer(hPixelSumToTs, N_LAYERS[1], "c_sumtot_pixel", Form("Pixel_sumToT_per_layer_run%s.png",run_number));
 
   // -----------------------------------------------------------------------
   // Save hPixelSumToTs to ROOT file:  out_run<run_number>.root
