@@ -236,7 +236,7 @@ void MySelection::Terminate()
    // The Terminate() function is the last function to be called during
    // a query. It always runs on the client, it can be used to present
    // the results graphically or save the results to file.
-  TFile *fout = new TFile("output_"+run_number+".root", "RECREATE");
+  TFile *fout = new TFile("histograms_"+run_number+".root", "RECREATE");
 
   h_strip_x_cor->Write();
   h_strip_y_cor->Write();
