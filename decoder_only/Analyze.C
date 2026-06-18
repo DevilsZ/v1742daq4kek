@@ -192,7 +192,7 @@ void Analyze(const char* filename) {
     return;
   }
 
-  TString outname = Form("out_run%s.root", run_number);
+  TString outname = Form("waveform_run%s.root", run_number);
   TFile* fout = TFile::Open(outname, "RECREATE");
   fout->cd();
 
@@ -438,7 +438,8 @@ void Analyze(const char* filename) {
     return c_front + (c_back - c_front) * (z_target - z_front) / (z_back - z_front);
   };
 
-  for (Long64_t iev = 0; iev < n_entries; iev++) {
+  //for (Long64_t iev = 0; iev < n_entries; iev++) {
+  for (Long64_t iev = 0; iev < 10; iev++) {
     if (iev % 10000 == 0)
       cout << "  Event " << iev << " / " << n_entries << endl;
     tree->GetEntry(iev);
