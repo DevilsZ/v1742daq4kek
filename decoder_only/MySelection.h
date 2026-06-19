@@ -62,6 +62,7 @@ public :
   TH2F* h2_Tlead_Amp[kMaxLayers][kMaxCh]  = {{nullptr}};
 
   TH1F* h_sum_charge[kMaxLayers] = {nullptr};
+  TH1F* h_max_charge[kMaxLayers] = {nullptr};
 
   TH1F* h_strip_x_cor = nullptr;
   TH1F* h_strip_y_cor = nullptr;

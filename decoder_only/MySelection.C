@@ -72,6 +72,11 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
 				Form("h_sum_charge_%s", kLayerNames[L]),
 				100, 0, 20000);
      GetOutputList()->Add(h_sum_charge[L]);
+     h_max_charge[L] = new TH1F(Form("h_max_charge_%s", kLayerNames[L]),
+				Form("h_max_charge_%s", kLayerNames[L]),
+				100, 0, 4000);
+     GetOutputList()->Add(h_max_charge[L]);
+
      for (int ch = 0; ch < kNCh[L]; ch++) {
        h2_ToT_Charge[L][ch] = new TH2F(Form("h2_ToT_Charge_%s_ch%02d", kLayerNames[L], ch),
 				       Form("ToT vs Charge %s ch%02d;ToT;Charge", kLayerNames[L], ch),
@@ -145,6 +150,8 @@ bool MySelection::Process(Long64_t entry)
    
    for (int L = 0; L < kMaxLayers; L++) {
      float sum_charge = 0.0f;
+     float max_charge = 0.0f;
+     // For strip
      float leading_charge = 0.0f;
      float sub_leading_charge = 0.0f;
      int leading_ch = -99;
@@ -177,10 +184,15 @@ bool MySelection::Process(Long64_t entry)
 	     sub_leading_charge = charge[i];
 	     sub_leading_ch = ch;
 	   }
+	 } else { // Pixel
+	   if (charge[i] > max_charge) {
+	     // Update max_charge
+	     max_charge = charge[i];
+	   }
 	 }
 
 	 // Get charge
-	 if (tot[i]>2.0 && charge[i]>10.)
+	 if (tot[i]>2.0 && charge[i]>100.)
 	   sum_charge += charge[i];
 	 
 	 // Skip event if number of hit layers is not 6 for pixel, If all strip have fit fill strip histograms
@@ -207,6 +219,9 @@ bool MySelection::Process(Long64_t entry)
      
      if (sum_charge > 0.0) {
        h_sum_charge[L]->Fill(sum_charge);
+     }
+     if (max_charge > 100.) {
+       h_max_charge[L]->Fill(max_charge);
      }
    } // End of Layer loop
    if (
@@ -245,6 +260,7 @@ void MySelection::Terminate()
   
     for (int L = 0; L < kMaxLayers; L++) {
       h_sum_charge[L]->Write();
+      h_max_charge[L]->Write();
         for (int ch = 0; ch < kNCh[L]; ch++) {
             h2_ToT_Charge[L][ch]->Write();
             h2_ToT_Amp[L][ch]->Write();
