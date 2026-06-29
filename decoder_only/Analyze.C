@@ -414,6 +414,7 @@ void Analyze(const char* filename) {
   // Layout: pulse_vars[group_idx][local_ch]
   std::vector<float> pv_tot      [numGROUPS][MAX_CH_PER_GROUP];
   std::vector<float> pv_t_lead   [numGROUPS][MAX_CH_PER_GROUP];
+  std::vector<float> pv_t_trail  [numGROUPS][MAX_CH_PER_GROUP];
   std::vector<float> pv_charge   [numGROUPS][MAX_CH_PER_GROUP];
   std::vector<float> pv_min_adc  [numGROUPS][MAX_CH_PER_GROUP];
   std::vector<float> pv_pedestal [numGROUPS][MAX_CH_PER_GROUP];
@@ -430,6 +431,7 @@ void Analyze(const char* filename) {
       pulse_tree->Branch(Form("%s_ch%02d_n",        gd.name, lch), &pv_npulses [g][lch], Form("%s_ch%02d_n/I",  gd.name, lch));
       pulse_tree->Branch(Form("%s_ch%02d_tot",      gd.name, lch), &pv_tot     [g][lch]);
       pulse_tree->Branch(Form("%s_ch%02d_t_lead",   gd.name, lch), &pv_t_lead  [g][lch]);
+      pulse_tree->Branch(Form("%s_ch%02d_t_trail",  gd.name, lch), &pv_t_trail [g][lch]);
       pulse_tree->Branch(Form("%s_ch%02d_charge",   gd.name, lch), &pv_charge  [g][lch]);
       pulse_tree->Branch(Form("%s_ch%02d_min_adc",  gd.name, lch), &pv_min_adc [g][lch]);
       pulse_tree->Branch(Form("%s_ch%02d_pedestal", gd.name, lch), &pv_pedestal[g][lch]);
@@ -466,6 +468,7 @@ void Analyze(const char* filename) {
       for (int lch = 0; lch < gd.n_ch; lch++) {
         pv_tot     [g][lch].clear();
         pv_t_lead  [g][lch].clear();
+        pv_t_trail [g][lch].clear();
         pv_charge  [g][lch].clear();
         pv_min_adc [g][lch].clear();
         pv_pedestal[g][lch].clear();
@@ -515,6 +518,7 @@ void Analyze(const char* filename) {
         for (const auto& p : pulses_all[gd.board][gch]) {
           pv_tot     [g][lch].push_back(p.tot);
           pv_t_lead  [g][lch].push_back(p.t_lead);
+          pv_t_trail [g][lch].push_back(p.t_trail);
           pv_charge  [g][lch].push_back(p.charge);
           pv_min_adc [g][lch].push_back(p.min_adc);
           pv_pedestal[g][lch].push_back(p.pedestal);
