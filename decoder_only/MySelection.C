@@ -22,14 +22,9 @@
 // root> T->Process("MySelection.C")
 // root> T->Process("MySelection.C","some options")
 // root> T->Process("MySelection.C+")
-//
-
-
 #include "MySelection.h"
 #include <TH2.h>
 #include <TStyle.h>
-
-
 
 void MySelection::Begin(TTree * /*tree*/)
 {
@@ -71,12 +66,15 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
      h_sum_charge[L] = new TH1F(Form("h_sum_charge_%s", kLayerNames[L]),
 				Form("h_sum_charge_%s", kLayerNames[L]),
 				100, 0, 20000);
-     GetOutputList()->Add(h_sum_charge[L]);
      h_max_charge[L] = new TH1F(Form("h_max_charge_%s", kLayerNames[L]),
 				Form("h_max_charge_%s", kLayerNames[L]),
 				100, 0, 4000);
+     h2_Tlead[L]     = new TH2F(Form("h2_Tlead_%s", kLayerNames[L]),
+				Form("T_lead vs ch %s;Layer;\{t_lead - t_average};", kLayerNames[L]),
+				kNCh[L], 0, kNCh[L], 100, -50, 50);
+     GetOutputList()->Add(h_sum_charge[L]);
      GetOutputList()->Add(h_max_charge[L]);
-
+     GetOutputList()->Add(h2_Tlead[L]);
      for (int ch = 0; ch < kNCh[L]; ch++) {
        h2_ToT_Charge[L][ch] = new TH2F(Form("h2_ToT_Charge_%s_ch%02d", kLayerNames[L], ch),
 				       Form("ToT vs Charge %s ch%02d;ToT;Charge", kLayerNames[L], ch),
@@ -89,20 +87,26 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
 				       1000, 0, 1000, 100, 0, 8000);
        h2_Tlead_ToT[L][ch]  = new TH2F(Form("h2_Tlead_ToT_%s_ch%02d", kLayerNames[L], ch),
 				       Form("Tlead vs ToT %s ch%02d;t_lead;ToT", kLayerNames[L], ch),
-				       1000, 0, 1000, 100, 0, 20);
+				       130, -300, 1000, 100, 0, 20);
        h2_Tlead_Amp[L][ch]  = new TH2F(Form("h2_Tlead_Amp_%s_ch%02d", kLayerNames[L], ch),
-				       Form("Tlead vs Amp %s ch%02d;t_lead;Amp", kLayerNames[L], ch),
-				       1000, 0, 1000, 1000, 0, 1000);
+				       Form("Tlead vs Amp %s ch%02d;Amp;t_lead - t_average", kLayerNames[L], ch),
+				       100, 0, 500, 100, -10, 10);
+       h2_Tlead_T0[L][ch]   = new TH2F(Form("h2_Tlead_T0_%s_ch%02d", kLayerNames[L], ch),
+				       Form("Tlead vs T0 %s ch%02d;t_lead;t_0", kLayerNames[L], ch),
+				       240,    0, 240, 240, 0, 240);
+       h_Tlead[L][ch]       = new TH1F(Form("h_Tlead_%s_ch%02d", kLayerNames[L], ch),
+				       Form("T_lead %s ch%02d;t_lead - t_0;", kLayerNames[L], ch),
+				       1300, -300, 1000);
        //
        GetOutputList()->Add(h2_ToT_Charge[L][ch]);
        GetOutputList()->Add(h2_ToT_Amp[L][ch]);
        GetOutputList()->Add(h2_Amp_Charge[L][ch]);
        GetOutputList()->Add(h2_Tlead_ToT[L][ch]);
        GetOutputList()->Add(h2_Tlead_Amp[L][ch]);
-     }
-     
+       GetOutputList()->Add(h2_Tlead_T0[L][ch]);
+       GetOutputList()->Add(h_Tlead[L][ch]);
+     } 
    }
-
 }
 
 bool MySelection::Process(Long64_t entry)
@@ -122,14 +126,13 @@ bool MySelection::Process(Long64_t entry)
    // Use fStatus to set the return value of TTree::Process().
    //
    // The return value is currently not used.
-
    fReader.SetLocalEntry(entry);
 
    // Hit encoder
    // assuming;
-   // 1111** all strip have hit
+   // 1111** all strip have hit, 111111 hits in all layers
    std::string hit_encoder = "000000";
-
+   /* hit decision to be changed
    for (int L = 0; L < kMaxLayers; L++) {
      for (int ch = 0; ch < kNCh[L]; ch++) {
        
@@ -139,24 +142,33 @@ bool MySelection::Process(Long64_t entry)
 	 hit_encoder[L] = '1';
      }
    }
+   */
 
    //   if (hit_encoder.starts_with("1111"))
    if (hit_encoder.rfind("1111", 0) == 0) {
+     // TODO: Strip tracking for future
      // cout << "Strip Tracking..." << endl;
    }
    
    //
    float hit_position[kMaxLayers] = {-100.0f};
-   
+   // global timing reference
+   float t0 = -100.0f;
+   float t_average[kMaxLayers] = {0.0f};
+   int   n_int[kMaxLayers] = {0};
+   // local timing reference per layer
+   float t0_local[kMaxLayers] = {-100.0f};
+   float sum_charge[kMaxLayers] = {0.0f};
+   float max_charge[kMaxLayers] = {0.0f};
+   // For strip
+   float leading_charge[kMaxLayers] = {0.0f};
+   float sub_leading_charge[kMaxLayers] = {0.0f};
+   int leading_ch[kMaxLayers] = {-99};
+   int sub_leading_ch[kMaxLayers] = {-99};
+
    for (int L = 0; L < kMaxLayers; L++) {
-     float sum_charge = 0.0f;
-     float max_charge = 0.0f;
-     // For strip
-     float leading_charge = 0.0f;
-     float sub_leading_charge = 0.0f;
-     int leading_ch = -99;
-     int sub_leading_ch = -99;
-     
+     // 1. 
+     //  The first loop to determine leanding channel in the L's layer
      for (int ch = 0; ch < kNCh[L]; ch++) {
        // get values
        auto n         = **nArr[L][ch];
@@ -169,67 +181,117 @@ bool MySelection::Process(Long64_t entry)
 
        // Process per each pulse
        for (std::size_t i = 0; i < tot.GetSize(); i++) {
-	 // Select only beam hits, reduce noise
-	 if (t_lead[i] < 2 || t_lead[i] > 250)
+	 // Select only beam hit like pulse, reduce noise
+	 if (t_lead[i] < 10. || t_lead[i] > 240.)
 	   continue;
 
+	 // requirement for ToT and min_adc
+	 if (tot[i]<2.5 && min_adc[i] < -20.0*tot[i] - 20.0)
+	   continue;
+
+	 if (charge[i]<100.)
+	   continue;
+	 	 
 	 // this process only for strip
 	 if (L<4) { // == Strip layer
-	   if (charge[i] > leading_charge) {
-	     sub_leading_charge = leading_charge;
-	     sub_leading_ch = leading_ch;
-	     leading_charge = charge[i];
-	     leading_ch = ch;
-	   } else if (charge[i] > sub_leading_charge) {
-	     sub_leading_charge = charge[i];
-	     sub_leading_ch = ch;
+	   if (charge[i] > leading_charge[L]) { // Update leading strip 
+	     sub_leading_charge[L] = leading_charge[L];
+	     sub_leading_ch[L] = leading_ch[L];
+	     leading_charge[L] = charge[i];
+	     leading_ch[L] = ch;
+	     // Get t0
+	     if (L==0) {
+	       t0 = t_lead[i];
+	     }
+	     t0_local[L] = t_lead[i];
+	   } else if (charge[i] > sub_leading_charge[L]) { // Update sub-leading strip
+	     sub_leading_charge[L] = charge[i];
+	     sub_leading_ch[L] = ch;
 	   }
-	 } else { // Pixel
-	   if (charge[i] > max_charge) {
+	 } else { // == Pixel layer
+	   if (charge[i] > max_charge[L]) {
 	     // Update max_charge
-	     max_charge = charge[i];
+	     max_charge[L] = charge[i];
 	   }
 	 }
 
-	 // Get charge
-	 if (tot[i]>2.0 && charge[i]>100.)
-	   sum_charge += charge[i];
+	 // Get charge --> should be leading hit only
+	 sum_charge[L] += charge[i];
+	 t_average[L]  += t_lead[i];
+	 n_int[L]      += 1;
+       }
+     }
+     if (n_int[L] > 0) {
+       t_average[L] /= n_int[L];
+       hit_encoder[L] = '1';
+     }
+
+   } // End of 1st Layer loop
+
+   
+   for (int L = 0; L < kMaxLayers; L++) {
+     // 2.
+     //  The second loop; 
+     for (int ch = 0; ch < kNCh[L]; ch++) {
+       // get values
+       auto n         = **nArr[L][ch];
+       // get vectors
+       auto& tot      = *totArr[L][ch];
+       auto& t_lead   = *t_leadArr[L][ch];
+       auto& charge   = *chargeArr[L][ch];
+       auto& min_adc  = *min_adcArr[L][ch];
+       auto& pedestal = *pedestalArr[L][ch];
+
+       // Process per each pulse
+       for (std::size_t i = 0; i < tot.GetSize(); i++) {
+	 // Select only beam hit like pulse, reduce noise
+	 if (t_lead[i] < 10. || t_lead[i] > 240.)
+	   continue;
 	 
+	 // requirement for ToT and min_adc
+	 if (tot[i]<2.5 && min_adc[i] < -20.0*tot[i] - 20.0)
+	   continue;
+
+	 if (charge[i]<100.)
+	   continue;
+
 	 // Skip event if number of hit layers is not 6 for pixel, If all strip have fit fill strip histograms
 	 if ((hit_encoder=="111111" && L>3) || (hit_encoder.rfind("1111", 0) == 0 && L<4)) {
 	   h2_ToT_Charge[L][ch]->Fill(tot[i], charge[i]);
 	   h2_ToT_Amp[L][ch]->Fill(tot[i], -1.0*min_adc[i]);
 	   h2_Amp_Charge[L][ch]->Fill(-1.0*min_adc[i], charge[i]);
-	   h2_Tlead_ToT[L][ch]->Fill(t_lead[i], tot[i]);
-	   h2_Tlead_Amp[L][ch]->Fill(t_lead[i], -1.0*min_adc[i]);
+	   if (min_adc[i]<-50.) {
+	     h2_Tlead_ToT[L][ch]->Fill(t_lead[i] -1.0*t0, tot[i]);
+	     if (t_lead[i] -t_average[L] != 0)
+	       h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] -t_average[L]);
+	     
+	     h2_Tlead_T0[L][ch]->Fill(t_lead[i],  t0);
+	     h_Tlead[L][ch]->Fill(t_lead[i]-1.0*t0);
+	     h2_Tlead[L]->Fill(ch, t_lead[i]-t_average[L]);
+	   }
 	 }
        } // End of pulse loop
      } // End of channel loop
-
+     
      // Process
      if (L<4) { // Strip 0,1,2,3
-       if (abs(leading_ch-sub_leading_ch)==1) { // Find two successful hits
+       if (abs(leading_ch[L]-sub_leading_ch[L])==1) { // Find two successful hits
 	 // DEBUG cout << leading_ch << " " << leading_charge << ":" << sub_leading_ch << " " << sub_leading_charge << endl;
-	 hit_position[L] = (leading_ch*leading_charge + sub_leading_ch*sub_leading_charge)/(leading_charge + sub_leading_charge) * 0.5;
-       } else if (leading_ch>0) { // Find leading channel only
-	 hit_position[L] = leading_ch*0.5;
+	 hit_position[L] = (leading_ch[L]*leading_charge[L] + sub_leading_ch[L]*sub_leading_charge[L])/(leading_charge[L] + sub_leading_charge[L]) * 0.5;
+       } else if (leading_ch[L]>0) { // Find leading channel only
+	 hit_position[L] = leading_ch[L]*0.5;
        }
      }
 
-     
-     if (sum_charge > 0.0) {
-       h_sum_charge[L]->Fill(sum_charge);
+     if (sum_charge[L] > 0.0) {
+       h_sum_charge[L]->Fill(sum_charge[L]);
      }
-     if (max_charge > 100.) {
-       h_max_charge[L]->Fill(max_charge);
+     if (max_charge[L] > 100.) {
+       h_max_charge[L]->Fill(max_charge[L]);
      }
-   } // End of Layer loop
-   if (
-       hit_position[0]>0.0 &&
-       hit_position[1]>0.0 &&
-       hit_position[2]>0.0 &&
-       hit_position[3]>0.0
-       ) {
+   } // End of 2nd Layer loop
+
+   if (hit_position[0]>0.0 && hit_position[1]>0.0 && hit_position[2]>0.0 && hit_position[3]>0.0) {
      h_strip_x_cor->Fill(hit_position[0]-hit_position[2]);
      h_strip_y_cor->Fill(hit_position[1]-hit_position[3]);
      h2_strip_x_cor->Fill(hit_position[0],hit_position[2]);
@@ -261,12 +323,15 @@ void MySelection::Terminate()
     for (int L = 0; L < kMaxLayers; L++) {
       h_sum_charge[L]->Write();
       h_max_charge[L]->Write();
+      h2_Tlead[L]->Write();
         for (int ch = 0; ch < kNCh[L]; ch++) {
             h2_ToT_Charge[L][ch]->Write();
             h2_ToT_Amp[L][ch]->Write();
             h2_Amp_Charge[L][ch]->Write();
             h2_Tlead_ToT[L][ch]->Write();
 	    h2_Tlead_Amp[L][ch]->Write();
+	    h2_Tlead_T0[L][ch]->Write();
+	    h_Tlead[L][ch]->Write();
         }
     }
 

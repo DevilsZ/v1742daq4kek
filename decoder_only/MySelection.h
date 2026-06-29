@@ -22,11 +22,10 @@
 #include <vector>
 
 
-
 class MySelection : public TSelector {
 public :
-   TTreeReader     fReader;  //!the tree reader
-   TTree          *fChain = 0;   //!pointer to the analyzed TTree or TChain
+  TTreeReader     fReader;  //!the tree reader
+  TTree          *fChain = 0;   //!pointer to the analyzed TTree or TChain
   TString input_filename;
   TString run_number;
   
@@ -49,28 +48,38 @@ public :
   };
   
   static constexpr bool kIsPixel[6] = {false,false,false,false,true,true};
-  static constexpr int  kNCh[6]     = {8,8,8,8,16,16};
+  static constexpr int  kNCh[6]     = {8, 8, 8, 8, 16, 16};
   
   // 6 layers × max 16 channels
   static constexpr int kMaxLayers = 6;
   static constexpr int kMaxCh     = 16;
 
+  // 2D histograms
   TH2F* h2_ToT_Charge[kMaxLayers][kMaxCh] = {{nullptr}};
   TH2F* h2_ToT_Amp[kMaxLayers][kMaxCh]    = {{nullptr}};
   TH2F* h2_Amp_Charge[kMaxLayers][kMaxCh] = {{nullptr}};
   TH2F* h2_Tlead_ToT[kMaxLayers][kMaxCh]  = {{nullptr}};
   TH2F* h2_Tlead_Amp[kMaxLayers][kMaxCh]  = {{nullptr}};
+  TH2F* h2_Tlead_T0[kMaxLayers][kMaxCh]   = {{nullptr}};
 
+  // 1D histograms / Layer / ch
+  TH1F* h_Tlead[kMaxLayers][kMaxCh]  = {{nullptr}};
+
+  // 2D histograms / Layer
+  TH2F* h2_Tlead[kMaxLayers] = {nullptr};
+  
+  // 1D historgams / Layer
   TH1F* h_sum_charge[kMaxLayers] = {nullptr};
   TH1F* h_max_charge[kMaxLayers] = {nullptr};
-
+  // 1D correlation
   TH1F* h_strip_x_cor = nullptr;
   TH1F* h_strip_y_cor = nullptr;
+  // 2D correlation
   TH2F* h2_strip_x_cor = nullptr;
   TH2F* h2_strip_y_cor = nullptr;
   
    // Readers to access the data (delete the ones you do not need).
-   TTreeReaderValue<Long64_t> ev_id = {fReader, "ev_id"};
+  TTreeReaderValue<Long64_t> ev_id = {fReader, "ev_id"};
 
   TTreeReaderValue<int>*   nArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* totArr[kMaxLayers][kMaxCh];
@@ -144,6 +153,5 @@ bool MySelection::Notify()
 
    return true;
 }
-
 
 #endif // #ifdef MySelection_cxx

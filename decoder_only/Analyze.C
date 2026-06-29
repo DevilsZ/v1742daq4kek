@@ -31,6 +31,20 @@ float ComputePedestalMedian(const Float_t* amp, int n_ped) {
   return buf[n_ped / 2];
 }
 
+float ComputePedestalMedian(const Float_t* amp, int start_idx, int end_idx) {
+    // Check interval
+    if (start_idx < 0)
+      start_idx = 0;
+    if (end_idx <= start_idx)
+      return 0.0;
+
+    int n_ped = end_idx - start_idx;
+
+    std::vector<Float_t> buf(amp + start_idx, amp + end_idx);
+    std::nth_element(buf.begin(), buf.begin() + n_ped/2, buf.end());
+    return buf[n_ped / 2];
+}
+
 std::vector<PulseShape> AnalyzeWaveform(const Float_t* amp,
                                         int board_id, int ch_id,
                                         int sample_n, float threshold,
@@ -42,8 +56,8 @@ std::vector<PulseShape> AnalyzeWaveform(const Float_t* amp,
   float charge_acc = 0.0f;
   float min_adc    = 0.0f;
 
-  // Pedestal: sigma-clipping median of first 50 samples
-  float pedestal = ComputePedestalMedian(amp, 50);
+  // Pedestal: sigma-clipping median of first (10, 50) samples
+  float pedestal = ComputePedestalMedian(amp, 10, 50);
 
   // Subtract pedestal from all samples before threshold processing.
   // min_adc and charge are therefore pedestal-subtracted values.
