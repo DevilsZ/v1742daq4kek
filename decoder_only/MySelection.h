@@ -16,6 +16,7 @@
 #include <TTreeReaderValue.h>
 #include <TTreeReaderArray.h>
 #include <TObjString.h>
+#include <TF1.h>
 #include <TH1.h>
 #include <TH2.h>
 // Headers needed by this particular selector
@@ -54,6 +55,37 @@ public :
   static constexpr int kMaxLayers = 6;
   static constexpr int kMaxCh     = 16;
 
+  // Time walk correction
+  TF1* f_thr_corr[kMaxLayers];
+  static constexpr float p0[kMaxLayers] = {-3.75, -1.70, -4.20, -1.20, -1.16, -1.64};
+  static constexpr float p1[kMaxLayers] = {  9.8,  13.7,  11.2,  15.9,  9.10,  10.0};
+  static constexpr float p2[kMaxLayers] = { 90.9,  42.8,  82.0,  31.3,  29.4,  34.9};
+  /* Results from fitting
+    p0                        =     -3.74639   +/-   0.218881    
+    p1                        =      9.84295   +/-   0.200928    
+    p2                        =      90.9227   +/-   6.86942     
+
+    p0                        =      -1.6942   +/-   0.0991329   
+    p1                        =      13.7421   +/-   0.951479    
+    p2                        =      42.7894   +/-   2.6912     
+
+    p0                        =     -4.19363   +/-   0.272946    
+    p1                        =      11.1639   +/-   0.315717    
+    p2                        =       81.963   +/-   7.39123
+    
+    p0                        =      -1.1985   +/-   0.0687073   
+    p1                        =      15.9389   +/-   1.46515     
+    p2                        =      31.3162   +/-   1.88374   
+    
+    p0                        =     -1.16149   +/-   0.120147    
+    p1                        =      9.10492   +/-   4.69797     
+    p2                        =       29.424   +/-   8.03004 
+    
+    p0                        =     -1.63706   +/-   0.064721    
+    p1                        =      9.98694   +/-   1.36857     
+    p2                        =      34.8656   +/-   3.25378
+  */
+  
   // 2D histograms
   TH2F* h2_ToT_Charge[kMaxLayers][kMaxCh] = {{nullptr}};
   TH2F* h2_ToT_Amp[kMaxLayers][kMaxCh]    = {{nullptr}};
@@ -84,6 +116,7 @@ public :
   TTreeReaderValue<int>*   nArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* totArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* t_leadArr[kMaxLayers][kMaxCh];
+  TTreeReaderArray<float>* t_trailArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* chargeArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* min_adcArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* pedestalArr[kMaxLayers][kMaxCh];
@@ -128,6 +161,7 @@ void MySelection::Init(TTree *tree)
        TString bname_n        = Form("pulse_%s_ch%02d_n",        kLayerNames[L], ch);
        TString bname_tot      = Form("pulse_%s_ch%02d_tot",      kLayerNames[L], ch);
        TString bname_t_lead   = Form("pulse_%s_ch%02d_t_lead",   kLayerNames[L], ch);
+       TString bname_t_trail  = Form("pulse_%s_ch%02d_t_trail",  kLayerNames[L], ch);
        TString bname_charge   = Form("pulse_%s_ch%02d_charge",   kLayerNames[L], ch);
        TString bname_min_adc  = Form("pulse_%s_ch%02d_min_adc",  kLayerNames[L], ch);
        TString bname_pedestal = Form("pulse_%s_ch%02d_pedestal", kLayerNames[L], ch);
@@ -135,6 +169,7 @@ void MySelection::Init(TTree *tree)
        nArr[L][ch]        = new TTreeReaderValue<int>(fReader,   bname_n);
        totArr[L][ch]      = new TTreeReaderArray<float>(fReader, bname_tot);
        t_leadArr[L][ch]   = new TTreeReaderArray<float>(fReader, bname_t_lead);
+       t_trailArr[L][ch]  = new TTreeReaderArray<float>(fReader, bname_t_trail);
        chargeArr[L][ch]   = new TTreeReaderArray<float>(fReader, bname_charge);
        min_adcArr[L][ch]  = new TTreeReaderArray<float>(fReader, bname_min_adc);
        pedestalArr[L][ch] = new TTreeReaderArray<float>(fReader, bname_pedestal);

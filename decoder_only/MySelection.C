@@ -37,7 +37,7 @@ void MySelection::Begin(TTree * /*tree*/)
   //input_filename = ((TObjString*)fInput->At(0))->GetString();
   input_filename = fOption;
   int run = 0;
-  sscanf(input_filename.Data(), "out_run%d.root", &run);
+  sscanf(input_filename.Data(), "waveform_run%d.root", &run);
   run_number = Form("%05d",run);
 }
 
@@ -49,6 +49,12 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
 
    TString option = GetOption();
 
+   for (int L = 0; L < kMaxLayers; ++L) {
+     f_thr_corr[L] = new TF1(Form("f_thr_corr_L%d", L), "[0] + [1]*exp(-x/[2])",
+			     0.0, 4000.);
+     f_thr_corr[L]->SetParameters(p0[L], p1[L], p2[L]);
+   }
+   
    h_strip_x_cor = new TH1F("h_strip_x_cor",
 			    "h_strip_x_cor;front x - rear x",
 			    80,-4,4);
@@ -70,7 +76,7 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
 				Form("h_max_charge_%s", kLayerNames[L]),
 				100, 0, 4000);
      h2_Tlead[L]     = new TH2F(Form("h2_Tlead_%s", kLayerNames[L]),
-				Form("T_lead vs ch %s;Layer;\{t_lead - t_average};", kLayerNames[L]),
+				Form("T_lead vs ch %s;Channel;\{t_lead - t_average};", kLayerNames[L]),
 				kNCh[L], 0, kNCh[L], 100, -50, 50);
      GetOutputList()->Add(h_sum_charge[L]);
      GetOutputList()->Add(h_max_charge[L]);
@@ -175,6 +181,7 @@ bool MySelection::Process(Long64_t entry)
        // get vectors
        auto& tot      = *totArr[L][ch];
        auto& t_lead   = *t_leadArr[L][ch];
+       auto& t_trail  = *t_trailArr[L][ch];
        auto& charge   = *chargeArr[L][ch];
        auto& min_adc  = *min_adcArr[L][ch];
        auto& pedestal = *pedestalArr[L][ch];
@@ -238,6 +245,7 @@ bool MySelection::Process(Long64_t entry)
        // get vectors
        auto& tot      = *totArr[L][ch];
        auto& t_lead   = *t_leadArr[L][ch];
+       auto& t_trail  = *t_trailArr[L][ch];
        auto& charge   = *chargeArr[L][ch];
        auto& min_adc  = *min_adcArr[L][ch];
        auto& pedestal = *pedestalArr[L][ch];
@@ -261,12 +269,14 @@ bool MySelection::Process(Long64_t entry)
 	   h2_ToT_Amp[L][ch]->Fill(tot[i], -1.0*min_adc[i]);
 	   h2_Amp_Charge[L][ch]->Fill(-1.0*min_adc[i], charge[i]);
 	   if (min_adc[i]<-50.) {
-	     h2_Tlead_ToT[L][ch]->Fill(t_lead[i] -1.0*t0, tot[i]);
+	     h2_Tlead_ToT[L][ch]->Fill(t_lead[i]/2.0 + t_trail[i]/2.0, tot[i]);
 	     if (t_lead[i] -t_average[L] != 0)
-	       h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] -t_average[L]);
+	       h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] - t_average[L]);
 	     
 	     h2_Tlead_T0[L][ch]->Fill(t_lead[i],  t0);
-	     h_Tlead[L][ch]->Fill(t_lead[i]-1.0*t0);
+	     float tlead_corr = t_lead[i] - f_thr_corr[L]->Eval(-1.0*min_adc[i]);
+	     //h_Tlead[L][ch]->Fill(t_lead[i]-1.0*t0);
+	     h_Tlead[L][ch]->Fill(tlead_corr - t_average[L]);
 	     h2_Tlead[L]->Fill(ch, t_lead[i]-t_average[L]);
 	   }
 	 }
