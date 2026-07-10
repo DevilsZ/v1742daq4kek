@@ -6,7 +6,8 @@ CXXFLAGS    = -Wall -g -O2 -std=c++11 -pthread -Iinc
 LD          = g++
 
 # Program names
-PROGS       = dat2root rootanalyzer
+#PROGS       = dat2root rootanalyzer
+PROGS       = dat2root
 
 # ROOT settings
 ROOTCFLAGS  := $(shell root-config --cflags)
@@ -16,7 +17,7 @@ ROOTLIBS    := $(shell root-config --libs)
 OBJS_COMMON = inc/v1742Event.o
 
 OBJS_DAT2ROOT = dat2root.o $(OBJS_COMMON)
-OBJS_ROOTANALYZER = rootanalyzer.o $(OBJS_COMMON)
+#OBJS_ROOTANALYZER = rootanalyzer.o $(OBJS_COMMON)
 
 # Default target
 all: $(PROGS)
@@ -33,8 +34,8 @@ inc/v1742Event.o: inc/v1742Event.cpp inc/v1742Event.hpp inc/headers.h
 dat2root: $(OBJS_DAT2ROOT)
 	$(LD) $(OBJS_DAT2ROOT) $(ROOTLIBS) -o $@
 
-rootanalyzer: $(OBJS_ROOTANALYZER)
-	$(LD) $(OBJS_ROOTANALYZER) $(ROOTLIBS) -o $@
+#rootanalyzer: $(OBJS_ROOTANALYZER)
+#	$(LD) $(OBJS_ROOTANALYZER) $(ROOTLIBS) -o $@
 
 # Cleanup
 clean:
