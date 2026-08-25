@@ -25,10 +25,10 @@
 
 class MySelection : public TSelector {
 public :
-  TTreeReader     fReader;  //!the tree reader
+  TTreeReader     fReader;      //!the tree reader
   TTree          *fChain = 0;   //!pointer to the analyzed TTree or TChain
-  TString input_filename;
-  TString run_number;
+  TString         input_filename;
+  TString         run_number;
   
   // =============================================================================
   //  Cut parameters  (edit here freely)
@@ -51,7 +51,7 @@ public :
   static constexpr bool kIsPixel[6] = {false,false,false,false,true,true};
   static constexpr int  kNCh[6]     = {8, 8, 8, 8, 16, 16};
   
-  // 6 layers × max 16 channels
+  // 6 layers, max 16 channels
   static constexpr int kMaxLayers = 6;
   static constexpr int kMaxCh     = 16;
 
@@ -85,6 +85,9 @@ public :
     p1                        =      9.98694   +/-   1.36857     
     p2                        =      34.8656   +/-   3.25378
   */
+
+  // Sanity checks
+  //TH1F* h_
   
   // 2D histograms
   TH2F* h2_ToT_Charge[kMaxLayers][kMaxCh] = {{nullptr}};

@@ -36,9 +36,13 @@ void MySelection::Begin(TTree * /*tree*/)
   //  if (fInput && fInput->GetEntries() > 0) {
   //input_filename = ((TObjString*)fInput->At(0))->GetString();
   input_filename = fOption;
-  int run = 0;
-  sscanf(input_filename.Data(), "waveform_run%d.root", &run);
-  run_number = Form("%05d",run);
+  cout << "input_filename: " << input_filename << endl;
+  run_number = input_filename(input_filename.Index("waveform_run") + 12, 5);
+  cout << "run_number: " << run_number << endl;
+  
+  //int run = 0;
+  //sscanf(input_filename.Data(), "waveform_run%d.root", &run);
+  //run_number = Form("%05d",run);
 }
 
 void MySelection::SlaveBegin(TTree * /*tree*/)
@@ -291,13 +295,18 @@ bool MySelection::Process(Long64_t entry)
        } else if (leading_ch[L]>0) { // Find leading channel only
 	 hit_position[L] = leading_ch[L]*0.5;
        }
+       if (leading_charge[L] > 30.) {
+	 h_max_charge[L]->Fill(leading_charge[L]);
+       }
+
+     } else { // Pixel
+       if (max_charge[L] > 100.) {
+	 h_max_charge[L]->Fill(max_charge[L]);
+       }
      }
 
      if (sum_charge[L] > 0.0) {
        h_sum_charge[L]->Fill(sum_charge[L]);
-     }
-     if (max_charge[L] > 100.) {
-       h_max_charge[L]->Fill(max_charge[L]);
      }
    } // End of 2nd Layer loop
 
