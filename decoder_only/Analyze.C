@@ -48,7 +48,8 @@ float ComputePedestalMedian(const Float_t* amp, int start_idx, int end_idx) {
 std::vector<PulseShape> AnalyzeWaveform(const Float_t* amp,
                                         int board_id, int ch_id,
                                         int sample_n, float threshold,
-                                        float sampling_interval, float min_tot) {
+                                        float sampling_interval, float min_tot,
+					int pede_start_idx, int pede_end_idx) {
   std::vector<PulseShape> results;
   bool  in_pulse   = false;
   int   peak_idx   = 0;
@@ -57,7 +58,7 @@ std::vector<PulseShape> AnalyzeWaveform(const Float_t* amp,
   float min_adc    = 0.0f;
 
   // Pedestal: sigma-clipping median of first (10, 50) samples
-  float pedestal = ComputePedestalMedian(amp, 10, 50);
+  float pedestal = ComputePedestalMedian(amp, pede_start_idx, pede_end_idx);
 
   // Subtract pedestal from all samples before threshold processing.
   // min_adc and charge are therefore pedestal-subtracted values.
@@ -136,7 +137,7 @@ void Analyze(const TString& filename) {
   const int   NBOARDS           = 2;
   const int   N_CH              = 32;
   const int   SAMPLE_N          = 1024;
-  const float THRESHOLD         = -50.0f;
+  const float THRESHOLD         = -20.0f;
   const float SAMPLING_INTERVAL = 1.0f;
   const int   MAX_LAYERS        = 4;
   const int   reso_factor       = 4;
@@ -163,10 +164,14 @@ void Analyze(const TString& filename) {
   const int CH_PER_LAYER[NBOARDS] = {8, 16};
 
   // Z positions [mm] -- adjust to actual geometry
-  const float Z_STRIP_FRONT = 0.0f;
-  const float Z_STRIP_BACK  = 375.0f;
-  const float Z_PIXEL_FRONT = 500.0f;
-  const float Z_PIXEL_BACK  = 520.0f;
+  //const float Z_STRIP_FRONT   = 0.0f;
+  const float Z_STRIP_FRONT_X = 0.0f;
+  const float Z_STRIP_FRONT_Y = 24.0f;
+  //const float Z_STRIP_BACK    = 375.0f;
+  const float Z_STRIP_BACK_X  = 375.0f;
+  const float Z_STRIP_BACK_Y  = 399.0f;
+  const float Z_PIXEL_FRONT   = 490.5f;
+  const float Z_PIXEL_BACK    = 510.0f;
 
   // Pixel channel mapping: local_ch (0-15) -> row / col in a 4x4 grid
   // col -> X direction, row -> Y direction
@@ -181,6 +186,9 @@ void Analyze(const TString& filename) {
     {2.0, 2.0, 2.0, 2.0},
     {2.0, 2.0, 2.0, 2.0}
   };
+
+  const int pede_start_idx = 10;
+  const int pede_end_idx = 50;
   
   // Dead channel list per board (global ch index within the board)
   const std::set<int> DEAD_CH[NBOARDS] = {
@@ -199,11 +207,7 @@ void Analyze(const TString& filename) {
   }
   
   // Get run_number for filename
-  //char run_number[32];
-  //char run_number[32] = filename(filename.Index("run_") + 4, 5);
   TString run_number = filename(filename.Index("run_") + 4, 5);
-  //sscanf(filename, "run_%[^.].root", run_number);
-
   cout << "Run number:" << run_number << endl;
   
   TTree* tree = (TTree*)f->Get("tree");
@@ -494,7 +498,7 @@ void Analyze(const TString& filename) {
         if (DEAD_CH[b].count(ch))
 	  continue;
 	// Get waveform from samling
-        pulses_all[b][ch] = AnalyzeWaveform(amp[b][ch], b, ch, SAMPLE_N, THRESHOLD, SAMPLING_INTERVAL, min_tot[b][(int)ch%4]);
+        pulses_all[b][ch] = AnalyzeWaveform(amp[b][ch], b, ch, SAMPLE_N, THRESHOLD, SAMPLING_INTERVAL, min_tot[b][(int)ch%4], pede_start_idx, pede_end_idx);
         if (!pulses_all[b][ch].empty()) {
           ch_hit[b][ch] = true;
         }
@@ -662,8 +666,10 @@ void Analyze(const TString& filename) {
     if (n_layers_hit_pixel != N_LAYERS[1]) continue;
 
     SixLayerData sx;
-    sx.x1_mm = strip_centroid_mm[0]; sx.y1_mm = strip_centroid_mm[1];
-    sx.x2_mm = strip_centroid_mm[2]; sx.y2_mm = strip_centroid_mm[3];
+    sx.x1_mm = strip_centroid_mm[0];
+    sx.y1_mm = strip_centroid_mm[1];
+    sx.x2_mm = strip_centroid_mm[2];
+    sx.y2_mm = strip_centroid_mm[3];
     for (int l = 0; l < 2; l++) {
       sx.pix_row[l] = pix_centroid_row[l];
       sx.pix_col[l] = pix_centroid_col[l];
@@ -709,8 +715,8 @@ void Analyze(const TString& filename) {
 
     for (int l = 0; l < N_LAYERS[1]; l++) {
       float  zt    = (l == 0) ? Z_PIXEL_FRONT : Z_PIXEL_BACK;
-      double Xex   = extrap_fn(sx.x1_mm, x2c,    Z_STRIP_FRONT, Z_STRIP_BACK, zt);
-      double Yex   = extrap_fn(sx.y1_mm, y2c,    Z_STRIP_FRONT, Z_STRIP_BACK, zt);
+      double Xex   = extrap_fn(sx.x1_mm, x2c,    Z_STRIP_FRONT_X, Z_STRIP_BACK_X, zt);
+      double Yex   = extrap_fn(sx.y1_mm, y2c,    Z_STRIP_FRONT_Y, Z_STRIP_BACK_Y, zt);
       hExtrapX_vs_Col[l]->Fill(Xex, sx.pix_col[l]);
       hExtrapY_vs_Row[l]->Fill(Yex, sx.pix_row[l]);
       // Residual: pixel centroid [pixel] - extrap [mm] / pitch [mm/pixel]
