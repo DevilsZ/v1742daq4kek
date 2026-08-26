@@ -389,12 +389,12 @@ void Analyze(const TString& filename) {
   // stored as std::vector<float> so multi-pulse events are handled.
   //
   // Channel grouping (global ch on each board):
-  //   pulse_strip_front_x  : Board 0, ch  0– 7  (local ch 0–7)
-  //   pulse_strip_front_y  : Board 0, ch  8–15  (local ch 0–7)
-  //   pulse_strip_rear_x   : Board 0, ch 16–23  (local ch 0–7)
-  //   pulse_strip_rear_y   : Board 0, ch 24–31  (local ch 0–7)
-  //   pulse_pixel_front    : Board 1, ch  0–15  (local ch 0–15)
-  //   pulse_pixel_rear     : Board 1, ch 16–31  (local ch 0–15)
+  //   pulse_strip_front_x  : Board 0, ch  0 -  7  (local ch 0-7)
+  //   pulse_strip_front_y  : Board 0, ch  8 - 15  (local ch 0-7)
+  //   pulse_strip_rear_x   : Board 0, ch 16 - 23  (local ch 0-7)
+  //   pulse_strip_rear_y   : Board 0, ch 24 - 31  (local ch 0-7)
+  //   pulse_pixel_front    : Board 1, ch  0 - 15  (local ch 0-15)
+  //   pulse_pixel_rear     : Board 1, ch 16 - 31  (local ch 0-15)
   //
   // Branch naming: <group>_ch<localch>_<quantity>
   // Quantities: tot, t_lead, charge, min_adc, pedestal, n_pulses (Int_t)
@@ -427,6 +427,7 @@ void Analyze(const TString& filename) {
   std::vector<float> pv_tot      [numGROUPS][MAX_CH_PER_GROUP];
   std::vector<float> pv_t_lead   [numGROUPS][MAX_CH_PER_GROUP];
   std::vector<float> pv_t_trail  [numGROUPS][MAX_CH_PER_GROUP];
+  std::vector<float> pv_t_rise   [numGROUPS][MAX_CH_PER_GROUP];
   std::vector<float> pv_charge   [numGROUPS][MAX_CH_PER_GROUP];
   std::vector<float> pv_min_adc  [numGROUPS][MAX_CH_PER_GROUP];
   std::vector<float> pv_pedestal [numGROUPS][MAX_CH_PER_GROUP];
@@ -444,6 +445,7 @@ void Analyze(const TString& filename) {
       pulse_tree->Branch(Form("%s_ch%02d_tot",      gd.name, lch), &pv_tot     [g][lch]);
       pulse_tree->Branch(Form("%s_ch%02d_t_lead",   gd.name, lch), &pv_t_lead  [g][lch]);
       pulse_tree->Branch(Form("%s_ch%02d_t_trail",  gd.name, lch), &pv_t_trail [g][lch]);
+      pulse_tree->Branch(Form("%s_ch%02d_t_rise",   gd.name, lch), &pv_t_rise  [g][lch]);
       pulse_tree->Branch(Form("%s_ch%02d_charge",   gd.name, lch), &pv_charge  [g][lch]);
       pulse_tree->Branch(Form("%s_ch%02d_min_adc",  gd.name, lch), &pv_min_adc [g][lch]);
       pulse_tree->Branch(Form("%s_ch%02d_pedestal", gd.name, lch), &pv_pedestal[g][lch]);
@@ -481,6 +483,7 @@ void Analyze(const TString& filename) {
         pv_tot     [g][lch].clear();
         pv_t_lead  [g][lch].clear();
         pv_t_trail [g][lch].clear();
+        pv_t_rise  [g][lch].clear();
         pv_charge  [g][lch].clear();
         pv_min_adc [g][lch].clear();
         pv_pedestal[g][lch].clear();
@@ -531,6 +534,7 @@ void Analyze(const TString& filename) {
           pv_tot     [g][lch].push_back(p.tot);
           pv_t_lead  [g][lch].push_back(p.t_lead);
           pv_t_trail [g][lch].push_back(p.t_trail);
+          pv_t_rise  [g][lch].push_back(p.t_rise);
           pv_charge  [g][lch].push_back(p.charge);
           pv_min_adc [g][lch].push_back(p.min_adc);
           pv_pedestal[g][lch].push_back(p.pedestal);
