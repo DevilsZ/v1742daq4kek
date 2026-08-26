@@ -177,7 +177,7 @@ bool MySelection::Process(Long64_t entry)
    int sub_leading_ch[kMaxLayers] = {-99};
 
    for (int L = 0; L < kMaxLayers; L++) {
-     // 1. 
+     // 1.
      //  The first loop to determine leanding channel in the L's layer
      for (int ch = 0; ch < kNCh[L]; ch++) {
        // get values
@@ -193,7 +193,7 @@ bool MySelection::Process(Long64_t entry)
        // Process per each pulse
        for (std::size_t i = 0; i < tot.GetSize(); i++) {
 	 // Select only beam hit like pulse, reduce noise
-	 if (t_lead[i] < 10. || t_lead[i] > 240.)
+	 if (t_lead[i] < 110. || t_lead[i] > 220.)
 	   continue;
 
 	 // requirement for ToT and min_adc
@@ -202,9 +202,12 @@ bool MySelection::Process(Long64_t entry)
 
 	 if (charge[i]<100.)
 	   continue;
-	 	 
-	 // this process only for strip
-	 if (L<4) { // == Strip layer
+
+	 if (min_adc[i] < 50.) // Leading strip condition
+	   continue;
+
+	 // Find leading channel, and sub-leading channel for stip
+	 if (L<4) { // Strip layer; this process only for strip
 	   if (charge[i] > leading_charge[L]) { // Update leading strip 
 	     sub_leading_charge[L] = leading_charge[L];
 	     sub_leading_ch[L] = leading_ch[L];
@@ -257,7 +260,7 @@ bool MySelection::Process(Long64_t entry)
        // Process per each pulse
        for (std::size_t i = 0; i < tot.GetSize(); i++) {
 	 // Select only beam hit like pulse, reduce noise
-	 if (t_lead[i] < 10. || t_lead[i] > 240.)
+	 if (t_lead[i] < 110. || t_lead[i] > 220.)
 	   continue;
 	 
 	 // requirement for ToT and min_adc
@@ -267,23 +270,45 @@ bool MySelection::Process(Long64_t entry)
 	 if (charge[i]<100.)
 	   continue;
 
+	 if (min_adc[i] < 50.) // Leading strip condition
+	   continue;
+	 
 	 // Skip event if number of hit layers is not 6 for pixel, If all strip have fit fill strip histograms
 	 //if ((hit_encoder=="111111" && L>3) || (hit_encoder.rfind("1111", 0) == 0 && L<4)) {
-	 if (1) {
-	   h2_ToT_Charge[L][ch]->Fill(tot[i], charge[i]);
-	   h2_ToT_Amp[L][ch]->Fill(tot[i], -1.0*min_adc[i]);
-	   h2_Amp_Charge[L][ch]->Fill(-1.0*min_adc[i], charge[i]);
-	   if (min_adc[i]<-20.) {
-	     h2_Tlead_ToT[L][ch]->Fill(t_lead[i]/2.0 + t_trail[i]/2.0, tot[i]);
-	     if (t_lead[i] -t_average[L] != 0)
-	       h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] - t_average[L]);
+	 if (L<4) { // Strip
+	   if (hit_encoder.rfind("1111", 0) == 0) {
+	   
+	     h2_ToT_Charge[L][ch]->Fill(tot[i], charge[i]);
+	     h2_ToT_Amp[L][ch]->Fill(tot[i], -1.0*min_adc[i]);
+	     h2_Amp_Charge[L][ch]->Fill(-1.0*min_adc[i], charge[i]);
+	     if (min_adc[i]<-20.) {
+	       h2_Tlead_ToT[L][ch]->Fill(t_lead[i]/2.0 + t_trail[i]/2.0, tot[i]);
+	       if (t_lead[i] -t_average[L] != 0)
+		 h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] - t_average[L]);
 	     
-	     h2_Tlead_T0[L][ch]->Fill(t_lead[i],  t0);
-	     float tlead_corr = t_lead[i] - f_thr_corr[L]->Eval(-1.0*min_adc[i]);
-	     //h_Tlead[L][ch]->Fill(t_lead[i]-1.0*t0);
-	     h_Tlead[L][ch]->Fill(tlead_corr - t_average[L]);
-	     h2_Tlead[L]->Fill(ch, t_lead[i]-t_average[L]);
+	       h2_Tlead_T0[L][ch]->Fill(t_lead[i],  t0);
+	       float tlead_corr = t_lead[i] - f_thr_corr[L]->Eval(-1.0*min_adc[i]);
+	       //h_Tlead[L][ch]->Fill(t_lead[i]-1.0*t0);
+	       h_Tlead[L][ch]->Fill(tlead_corr - t_average[L]);
+	       h2_Tlead[L]->Fill(ch, t_lead[i]-t_average[L]);
+	     }
 	   }
+	 } else { // Pixel
+	   if (1) {
+	     h2_ToT_Charge[L][ch]->Fill(tot[i], charge[i]);
+	     h2_ToT_Amp[L][ch]->Fill(tot[i], -1.0*min_adc[i]);
+	     h2_Amp_Charge[L][ch]->Fill(-1.0*min_adc[i], charge[i]);
+	     if (min_adc[i]<-20.) {
+	       h2_Tlead_ToT[L][ch]->Fill(t_lead[i]/2.0 + t_trail[i]/2.0, tot[i]);
+	       if (t_lead[i] -t_average[L] != 0)
+		 h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] - t_average[L]);
+	     
+	       h2_Tlead_T0[L][ch]->Fill(t_lead[i],  t0);
+	       float tlead_corr = t_lead[i] - f_thr_corr[L]->Eval(-1.0*min_adc[i]);
+	       //h_Tlead[L][ch]->Fill(t_lead[i]-1.0*t0);
+	       h_Tlead[L][ch]->Fill(tlead_corr - t_average[L]);
+	       h2_Tlead[L]->Fill(ch, t_lead[i]-t_average[L]);
+	     
 	 }
        } // End of pulse loop
      } // End of channel loop

@@ -55,6 +55,13 @@ public :
   static constexpr int kMaxLayers = 6;
   static constexpr int kMaxCh     = 16;
 
+  static constexpr int PIXEL_NROW = 4;
+  static constexpr int PIXEL_NCOL = 4;
+  static constexpr int mapping_row[16] = {3, 3, 2, 2, 1, 1, 0, 0,
+					  0, 0, 1, 1, 2, 2, 3, 3};
+  static constexpr int mapping_col[16] = {2, 3, 2, 3, 2, 3, 2, 3,
+					  0, 1, 0, 1, 0, 1, 0, 1};
+  
   // Time walk correction
   TF1* f_thr_corr[kMaxLayers];
   static constexpr float p0[kMaxLayers] = {-3.75, -1.70, -4.20, -1.20, -1.16, -1.64};
