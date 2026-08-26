@@ -16,6 +16,7 @@ struct PulseShape {
   int   peak_index;
   float t_lead;
   float t_trail;
+  float t_rise; // dA/dt, as dt is always 1, so it means just dA
   float tot;
   float charge;
   float min_adc;
@@ -54,6 +55,7 @@ std::vector<PulseShape> AnalyzeWaveform(const Float_t* amp,
   bool  in_pulse   = false;
   int   peak_idx   = 0;
   float t_lead     = 0.0f;
+  float t_rise     = 0.0f;
   float charge_acc = 0.0f;
   float min_adc    = 0.0f;
 
@@ -78,6 +80,7 @@ std::vector<PulseShape> AnalyzeWaveform(const Float_t* amp,
       charge_acc = 0.0f;
       min_adc = val;
       in_pulse = true;
+      t_rise = val - val_prev;
     }
     if (in_pulse) {
       charge_acc += (-val - threshold) * sampling_interval;
@@ -97,6 +100,7 @@ std::vector<PulseShape> AnalyzeWaveform(const Float_t* amp,
       r.peak_index = peak_idx;
       r.t_lead     = t_lead;
       r.t_trail    = t_trail;
+      r.t_rise     = t_rise;
       r.tot        = t_trail - t_lead;
       r.charge     = charge_acc;
       r.min_adc    = min_adc;
