@@ -269,7 +269,7 @@ bool MySelection::Process(Long64_t entry)
 
 	 // Skip event if number of hit layers is not 6 for pixel, If all strip have fit fill strip histograms
 	 //if ((hit_encoder=="111111" && L>3) || (hit_encoder.rfind("1111", 0) == 0 && L<4)) {
-	 if {
+	 if (1) {
 	   h2_ToT_Charge[L][ch]->Fill(tot[i], charge[i]);
 	   h2_ToT_Amp[L][ch]->Fill(tot[i], -1.0*min_adc[i]);
 	   h2_Amp_Charge[L][ch]->Fill(-1.0*min_adc[i], charge[i]);
