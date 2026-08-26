@@ -268,11 +268,12 @@ bool MySelection::Process(Long64_t entry)
 	   continue;
 
 	 // Skip event if number of hit layers is not 6 for pixel, If all strip have fit fill strip histograms
-	 if ((hit_encoder=="111111" && L>3) || (hit_encoder.rfind("1111", 0) == 0 && L<4)) {
+	 //if ((hit_encoder=="111111" && L>3) || (hit_encoder.rfind("1111", 0) == 0 && L<4)) {
+	 if {
 	   h2_ToT_Charge[L][ch]->Fill(tot[i], charge[i]);
 	   h2_ToT_Amp[L][ch]->Fill(tot[i], -1.0*min_adc[i]);
 	   h2_Amp_Charge[L][ch]->Fill(-1.0*min_adc[i], charge[i]);
-	   if (min_adc[i]<-50.) {
+	   if (min_adc[i]<-20.) {
 	     h2_Tlead_ToT[L][ch]->Fill(t_lead[i]/2.0 + t_trail[i]/2.0, tot[i]);
 	     if (t_lead[i] -t_average[L] != 0)
 	       h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] - t_average[L]);
