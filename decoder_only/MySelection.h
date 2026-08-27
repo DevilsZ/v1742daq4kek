@@ -127,6 +127,7 @@ public :
   TTreeReaderArray<float>* totArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* t_leadArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* t_trailArr[kMaxLayers][kMaxCh];
+  TTreeReaderArray<float>* t_riseArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* chargeArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* min_adcArr[kMaxLayers][kMaxCh];
   TTreeReaderArray<float>* pedestalArr[kMaxLayers][kMaxCh];
@@ -172,6 +173,7 @@ void MySelection::Init(TTree *tree)
        TString bname_tot      = Form("pulse_%s_ch%02d_tot",      kLayerNames[L], ch);
        TString bname_t_lead   = Form("pulse_%s_ch%02d_t_lead",   kLayerNames[L], ch);
        TString bname_t_trail  = Form("pulse_%s_ch%02d_t_trail",  kLayerNames[L], ch);
+       TString bname_t_rise   = Form("pulse_%s_ch%02d_t_rise",   kLayerNames[L], ch);
        TString bname_charge   = Form("pulse_%s_ch%02d_charge",   kLayerNames[L], ch);
        TString bname_min_adc  = Form("pulse_%s_ch%02d_min_adc",  kLayerNames[L], ch);
        TString bname_pedestal = Form("pulse_%s_ch%02d_pedestal", kLayerNames[L], ch);
@@ -180,6 +182,7 @@ void MySelection::Init(TTree *tree)
        totArr[L][ch]      = new TTreeReaderArray<float>(fReader, bname_tot);
        t_leadArr[L][ch]   = new TTreeReaderArray<float>(fReader, bname_t_lead);
        t_trailArr[L][ch]  = new TTreeReaderArray<float>(fReader, bname_t_trail);
+       t_riseArr[L][ch]   = new TTreeReaderArray<float>(fReader, bname_t_rise);
        chargeArr[L][ch]   = new TTreeReaderArray<float>(fReader, bname_charge);
        min_adcArr[L][ch]  = new TTreeReaderArray<float>(fReader, bname_min_adc);
        pedestalArr[L][ch] = new TTreeReaderArray<float>(fReader, bname_pedestal);

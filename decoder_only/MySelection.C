@@ -170,12 +170,17 @@ bool MySelection::Process(Long64_t entry)
    float t0_local[kMaxLayers] = {-100.0f};
    float sum_charge[kMaxLayers] = {0.0f};
    float max_charge[kMaxLayers] = {0.0f};
-   // For strip
+   // For strip and partially strip
    float leading_charge[kMaxLayers] = {0.0f};
    float sub_leading_charge[kMaxLayers] = {0.0f};
    int leading_ch[kMaxLayers] = {-99};
    int sub_leading_ch[kMaxLayers] = {-99};
-
+   // For pixel
+   int adjacent_ch_col[kMaxLayers][2] = { {-99, -99} }; // X
+   int adjacent_ch_row[kMaxLayers][2] = { {-99, -99} }; // Y
+   float adjacent_charge_col[kMaxLayers][2] = { {0.0f, 0.0f} }; // X
+   float adjacent_charge_row[kMaxLayers][2] = { {0.0f, 0.0f} }; // Y
+   
    for (int L = 0; L < kMaxLayers; L++) {
      // 1.
      //  The first loop to determine leanding channel in the L's layer
@@ -186,6 +191,7 @@ bool MySelection::Process(Long64_t entry)
        auto& tot      = *totArr[L][ch];
        auto& t_lead   = *t_leadArr[L][ch];
        auto& t_trail  = *t_trailArr[L][ch];
+       auto& t_rise   = *t_riseArr[L][ch];
        auto& charge   = *chargeArr[L][ch];
        auto& min_adc  = *min_adcArr[L][ch];
        auto& pedestal = *pedestalArr[L][ch];
@@ -197,10 +203,11 @@ bool MySelection::Process(Long64_t entry)
 	   continue;
 
 	 // requirement for ToT and min_adc
-	 if (tot[i]<2.5 && min_adc[i] < -20.0*tot[i] - 20.0)
+	 //if (tot[i]<2.5 && min_adc[i] < -20.0*tot[i] - 20.0)
+	 if (tot[i] < 4.0 && t_rise[i] > 30.)
 	   continue;
 
-	 if (charge[i]<100.)
+	 if (charge[i]  < 100.)
 	   continue;
 
 	 if (min_adc[i] < 50.) // Leading strip condition
@@ -226,6 +233,7 @@ bool MySelection::Process(Long64_t entry)
 	   if (charge[i] > max_charge[L]) {
 	     // Update max_charge
 	     max_charge[L] = charge[i];
+	     leading_ch[L] = ch;
 	   }
 	 }
 
@@ -234,12 +242,28 @@ bool MySelection::Process(Long64_t entry)
 	 t_average[L]  += t_lead[i];
 	 n_int[L]      += 1;
        }
-     }
+     } // End of channel loop
+     
+     // Set the hit_encoder[L] to 1 if the layer has any hits
      if (n_int[L] > 0) {
        t_average[L] /= n_int[L];
        hit_encoder[L] = '1';
      }
-
+     // Set adjacent channel for found leanding channel
+     for (int ch = 0; ch < kNCh[L]; ch++) {
+       if (mapping_row[ch] == mapping_row[leading_ch[L]]) {
+	 if (mapping_col[ch] == mapping_col[leading_ch[L]] - 1)
+	   adjacent_ch_col[L][0] = ch;
+	 if (mapping_col[ch] == mapping_col[leading_ch[L]] + 1)
+	   adjacent_ch_col[L][1] = ch;
+       }
+       if (mapping_col[ch] == mapping_col[leading_ch[L]]) {
+	 if (mapping_row[ch] == mapping_row[leading_ch[L]] - 1)
+	   adjacent_ch_row[L][0] = ch;
+	 if (mapping_row[ch] == mapping_row[leading_ch[L]] + 1)
+	   adjacent_ch_row[L][1] = ch;
+       }
+     }
    } // End of 1st Layer loop
 
    
@@ -253,6 +277,7 @@ bool MySelection::Process(Long64_t entry)
        auto& tot      = *totArr[L][ch];
        auto& t_lead   = *t_leadArr[L][ch];
        auto& t_trail  = *t_trailArr[L][ch];
+       auto& t_rise   = *t_riseArr[L][ch];
        auto& charge   = *chargeArr[L][ch];
        auto& min_adc  = *min_adcArr[L][ch];
        auto& pedestal = *pedestalArr[L][ch];
@@ -264,20 +289,49 @@ bool MySelection::Process(Long64_t entry)
 	   continue;
 	 
 	 // requirement for ToT and min_adc
-	 if (tot[i]<2.5 && min_adc[i] < -20.0*tot[i] - 20.0)
+	 //if (tot[i]<2.5 && min_adc[i] < -20.0*tot[i] - 20.0)
+	 if (tot[i] < 4.0 && t_rise[i] > 30.)
 	   continue;
 
-	 if (charge[i]<100.)
+	 if (charge[i]  < 10.) // Very loose condition
 	   continue;
 
-	 if (min_adc[i] < 50.) // Leading strip condition
+	 if (min_adc[i] < 20.) // Sub-Leading strip condition
 	   continue;
+
+	 // Get charge
+	 if (ch == adjacent_ch_row[L][0])
+	   adjacent_charge_row[L][0] = charge[i];
+	 if (ch == adjacent_ch_row[L][1])
+	   adjacent_charge_row[L][1] = charge[i];
+	 if (ch == adjacent_ch_col[L][0])
+	   adjacent_charge_col[L][0] = charge[i];
+	 if (ch == adjacent_ch_col[L][1])
+	   adjacent_charge_col[L][1] = charge[i];
 	 
 	 // Skip event if number of hit layers is not 6 for pixel, If all strip have fit fill strip histograms
 	 //if ((hit_encoder=="111111" && L>3) || (hit_encoder.rfind("1111", 0) == 0 && L<4)) {
 	 if (L<4) { // Strip
-	   if (hit_encoder.rfind("1111", 0) == 0) {
-	   
+	   if (hit_encoder.rfind("1111", 0) == 0) { // All strip layers have hits
+	     // Fill histograms
+	     h2_ToT_Charge[L][ch]->Fill(tot[i], charge[i]);
+	     h2_ToT_Amp[L][ch]->Fill(tot[i], -1.0*min_adc[i]);
+	     h2_Amp_Charge[L][ch]->Fill(-1.0*min_adc[i], charge[i]);
+	     if (min_adc[i]<-20.) {
+	       h2_Tlead_ToT[L][ch]->Fill(t_lead[i]/2.0 + t_trail[i]/2.0, tot[i]);
+	       if (t_lead[i] -t_average[L] != 0)
+		 h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] - t_average[L]);
+	       
+	       h2_Tlead_T0[L][ch]->Fill(t_lead[i],  t0);
+	       float tlead_corr = t_lead[i] - f_thr_corr[L]->Eval(-1.0*min_adc[i]);
+	       //h_Tlead[L][ch]->Fill(t_lead[i]-1.0*t0);
+	       h_Tlead[L][ch]->Fill(tlead_corr - t_average[L]);
+	       h2_Tlead[L]->Fill(ch, t_lead[i]-t_average[L]);
+	     }
+	   }
+	 } else { // Pixel
+	   if (1) {
+	     // Fill histograms
 	     h2_ToT_Charge[L][ch]->Fill(tot[i], charge[i]);
 	     h2_ToT_Amp[L][ch]->Fill(tot[i], -1.0*min_adc[i]);
 	     h2_Amp_Charge[L][ch]->Fill(-1.0*min_adc[i], charge[i]);
@@ -293,24 +347,9 @@ bool MySelection::Process(Long64_t entry)
 	       h2_Tlead[L]->Fill(ch, t_lead[i]-t_average[L]);
 	     }
 	   }
-	 } else { // Pixel
-	   if (1) {
-	     h2_ToT_Charge[L][ch]->Fill(tot[i], charge[i]);
-	     h2_ToT_Amp[L][ch]->Fill(tot[i], -1.0*min_adc[i]);
-	     h2_Amp_Charge[L][ch]->Fill(-1.0*min_adc[i], charge[i]);
-	     if (min_adc[i]<-20.) {
-	       h2_Tlead_ToT[L][ch]->Fill(t_lead[i]/2.0 + t_trail[i]/2.0, tot[i]);
-	       if (t_lead[i] -t_average[L] != 0)
-		 h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] - t_average[L]);
-	     
-	       h2_Tlead_T0[L][ch]->Fill(t_lead[i],  t0);
-	       float tlead_corr = t_lead[i] - f_thr_corr[L]->Eval(-1.0*min_adc[i]);
-	       //h_Tlead[L][ch]->Fill(t_lead[i]-1.0*t0);
-	       h_Tlead[L][ch]->Fill(tlead_corr - t_average[L]);
-	       h2_Tlead[L]->Fill(ch, t_lead[i]-t_average[L]);
-	     
 	 }
        } // End of pulse loop
+       
      } // End of channel loop
      
      // Process
