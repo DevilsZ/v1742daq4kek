@@ -39,7 +39,7 @@ void MySelection::Begin(TTree * /*tree*/)
   cout << "input_filename: " << input_filename << endl;
   run_number = input_filename(input_filename.Index("waveform_run") + 12, 5);
   cout << "run_number: " << run_number << endl;
-  
+
   //int run = 0;
   //sscanf(input_filename.Data(), "waveform_run%d.root", &run);
   //run_number = Form("%05d",run);
@@ -58,7 +58,7 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
 			     0.0, 4000.);
      f_thr_corr[L]->SetParameters(p0[L], p1[L], p2[L]);
    }
-   
+
    h_strip_x_cor = new TH1F("h_strip_x_cor",
 			    "h_strip_x_cor;front x - rear x",
 			    80,-4,4);
@@ -82,9 +82,44 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
      h2_Tlead[L]     = new TH2F(Form("h2_Tlead_%s", kLayerNames[L]),
 				Form("T_lead vs ch %s;Channel;\{t_lead - t_average};", kLayerNames[L]),
 				kNCh[L], 0, kNCh[L], 100, -50, 50);
+     h2_DUT_x_cor[L] = new TH2F(Form("h2_DUT_x_cor_%s", kLayerNames[L]),
+				Form("DUT center X vs X extra %s;X extra;DUT center X", kLayerNames[L]),
+				80, -2.0, 6.0, 80, -2.0, 6.0);
+     h2_DUT_y_cor[L] = new TH2F(Form("h2_DUT_y_cor_%s", kLayerNames[L]),
+				Form("DUT center Y vs X extra %s;Y extra;DUT center Y", kLayerNames[L]),
+				80, -2.0, 6.0, 80, -2.0, 6.0);
+     h2_DUT_x_cor_CS[L] = new TH2F(Form("h2_DUT_x_cor_CS_%s", kLayerNames[L]),
+				   Form("DUT center X vs X extra %s (Charge Shared);X extra;DUT center X", kLayerNames[L]),
+				   80, -2.0, 6.0, 80, -2.0, 6.0);
+     h2_DUT_y_cor_CS[L] = new TH2F(Form("h2_DUT_y_cor_CS_%s", kLayerNames[L]),
+				   Form("DUT center Y vs X extra %s (Charge Shared);Y extra;DUT center Y", kLayerNames[L]),
+				   80, -2.0, 6.0, 80, -2.0, 6.0);
+
+     h_DUT_x_diff[L] = new TH1F(Form("h_DUT_x_diff_%s", kLayerNames[L]),
+				Form("%s;DUT center X - X_{extra} [mm]", kLayerNames[L]),
+				80, -4.0, 4.0);
+     h_DUT_y_diff[L] = new TH1F(Form("h_DUT_y_diff_%s", kLayerNames[L]),
+				Form("%s;DUT center Y - Y_{extra} [mm]", kLayerNames[L]),
+				80, -4.0, 4.0);
+
+     h_DUT_x_diff_CS[L] = new TH1F(Form("h_DUT_x_diff_CS_%s", kLayerNames[L]),
+				Form("%s (Charge Shared);DUT center X - X_{extra} [mm]", kLayerNames[L]),
+				80, -4.0, 4.0);
+     h_DUT_y_diff_CS[L] = new TH1F(Form("h_DUT_y_diff_CS_%s", kLayerNames[L]),
+				Form("%s (Charge Shared);DUT center Y - Y_{extra} [mm]", kLayerNames[L]),
+				80, -4.0, 4.0);
+
      GetOutputList()->Add(h_sum_charge[L]);
      GetOutputList()->Add(h_max_charge[L]);
      GetOutputList()->Add(h2_Tlead[L]);
+     GetOutputList()->Add(h2_DUT_x_cor[L]);
+     GetOutputList()->Add(h2_DUT_y_cor[L]);
+     GetOutputList()->Add(h2_DUT_x_cor_CS[L]);
+     GetOutputList()->Add(h2_DUT_y_cor_CS[L]);
+     GetOutputList()->Add(h_DUT_x_diff[L]);
+     GetOutputList()->Add(h_DUT_y_diff[L]);
+     GetOutputList()->Add(h_DUT_x_diff_CS[L]);
+     GetOutputList()->Add(h_DUT_y_diff_CS[L]);
      for (int ch = 0; ch < kNCh[L]; ch++) {
        h2_ToT_Charge[L][ch] = new TH2F(Form("h2_ToT_Charge_%s_ch%02d", kLayerNames[L], ch),
 				       Form("ToT vs Charge %s ch%02d;ToT;Charge", kLayerNames[L], ch),
@@ -115,7 +150,7 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
        GetOutputList()->Add(h2_Tlead_Amp[L][ch]);
        GetOutputList()->Add(h2_Tlead_T0[L][ch]);
        GetOutputList()->Add(h_Tlead[L][ch]);
-     } 
+     }
    }
 }
 
@@ -145,9 +180,9 @@ bool MySelection::Process(Long64_t entry)
    /* hit decision to be changed
    for (int L = 0; L < kMaxLayers; L++) {
      for (int ch = 0; ch < kNCh[L]; ch++) {
-       
+
        int n = **nArr[L][ch];
-       
+
        if (n > 0)
 	 hit_encoder[L] = '1';
      }
@@ -159,28 +194,33 @@ bool MySelection::Process(Long64_t entry)
      // TODO: Strip tracking for future
      // cout << "Strip Tracking..." << endl;
    }
-   
+
    //
-   float hit_position[kMaxLayers] = {-100.0f};
+   float hit_position[kMaxLayers] = {-100.0f, -100.0f, -100.0f, -100.0f, -100.0f, -100.0f};
    // global timing reference
    float t0 = -100.0f;
    float t_average[kMaxLayers] = {0.0f};
    int   n_int[kMaxLayers] = {0};
    // local timing reference per layer
-   float t0_local[kMaxLayers] = {-100.0f};
+   float t0_local[kMaxLayers] = {-100.0f, -100.0f, -100.0f, -100.0f, -100.0f, -100.0f};
    float sum_charge[kMaxLayers] = {0.0f};
    float max_charge[kMaxLayers] = {0.0f};
    // For strip and partially strip
    float leading_charge[kMaxLayers] = {0.0f};
    float sub_leading_charge[kMaxLayers] = {0.0f};
-   int leading_ch[kMaxLayers] = {-99};
-   int sub_leading_ch[kMaxLayers] = {-99};
+   int leading_ch[kMaxLayers] = {-99, -99, -99, -99, -99, -99};
+   int sub_leading_ch[kMaxLayers] = {-99, -99, -99, -99, -99, -99};
    // For pixel
-   int adjacent_ch_col[kMaxLayers][2] = { {-99, -99} }; // X
-   int adjacent_ch_row[kMaxLayers][2] = { {-99, -99} }; // Y
-   float adjacent_charge_col[kMaxLayers][2] = { {0.0f, 0.0f} }; // X
-   float adjacent_charge_row[kMaxLayers][2] = { {0.0f, 0.0f} }; // Y
-   
+   int adjacent_ch_col[kMaxLayers][2]; //= { {-99, -99} }; // X
+   int adjacent_ch_row[kMaxLayers][2]; //= { {-99, -99} }; // Y
+   float adjacent_charge_col[kMaxLayers][2] = { {0.0f} }; // X
+   float adjacent_charge_row[kMaxLayers][2] = { {0.0f} }; // Y
+
+   for (int L = 0; L < kMaxLayers; L++) {
+     adjacent_ch_col[L][0] = adjacent_ch_col[L][1] = -99;
+     adjacent_ch_row[L][0] = adjacent_ch_row[L][1] = -99;
+   }
+
    for (int L = 0; L < kMaxLayers; L++) {
      // 1.
      //  The first loop to determine leanding channel in the L's layer
@@ -196,6 +236,7 @@ bool MySelection::Process(Long64_t entry)
        auto& min_adc  = *min_adcArr[L][ch];
        auto& pedestal = *pedestalArr[L][ch];
 
+
        // Process per each pulse
        for (std::size_t i = 0; i < tot.GetSize(); i++) {
 	 // Select only beam hit like pulse, reduce noise
@@ -204,18 +245,18 @@ bool MySelection::Process(Long64_t entry)
 
 	 // requirement for ToT and min_adc
 	 //if (tot[i]<2.5 && min_adc[i] < -20.0*tot[i] - 20.0)
-	 if (tot[i] < 4.0 && t_rise[i] > 30.)
+	 if (tot[i] < 4.0 && t_rise[i] < -30.)
 	   continue;
 
 	 if (charge[i]  < 100.)
 	   continue;
 
-	 if (min_adc[i] < 50.) // Leading strip condition
+	 if (min_adc[i] > -50.) // Leading strip condition
 	   continue;
 
 	 // Find leading channel, and sub-leading channel for stip
 	 if (L<4) { // Strip layer; this process only for strip
-	   if (charge[i] > leading_charge[L]) { // Update leading strip 
+	   if (charge[i] > leading_charge[L]) { // Update leading strip
 	     sub_leading_charge[L] = leading_charge[L];
 	     sub_leading_ch[L] = leading_ch[L];
 	     leading_charge[L] = charge[i];
@@ -243,13 +284,13 @@ bool MySelection::Process(Long64_t entry)
 	 n_int[L]      += 1;
        }
      } // End of channel loop
-     
+
      // Set the hit_encoder[L] to 1 if the layer has any hits
      if (n_int[L] > 0) {
        t_average[L] /= n_int[L];
        hit_encoder[L] = '1';
      }
-     // Set adjacent channel for found leanding channel
+     // Set adjacent channel for a found leanding channel
      for (int ch = 0; ch < kNCh[L]; ch++) {
        if (mapping_row[ch] == mapping_row[leading_ch[L]]) {
 	 if (mapping_col[ch] == mapping_col[leading_ch[L]] - 1)
@@ -266,10 +307,17 @@ bool MySelection::Process(Long64_t entry)
      }
    } // End of 1st Layer loop
 
-   
+   if (hit_encoder.rfind("1111", 0) != 0)
+     return false; // Skip events without four strip layer
+
+   // DEBUG cout << "hit_encoder: " << hit_encoder << endl;
+
    for (int L = 0; L < kMaxLayers; L++) {
+
+     if (leading_ch[L] < 0) continue; // No hits in this layer
+
      // 2.
-     //  The second loop; 
+     //  The second loop;
      for (int ch = 0; ch < kNCh[L]; ch++) {
        // get values
        auto n         = **nArr[L][ch];
@@ -284,19 +332,20 @@ bool MySelection::Process(Long64_t entry)
 
        // Process per each pulse
        for (std::size_t i = 0; i < tot.GetSize(); i++) {
+
 	 // Select only beam hit like pulse, reduce noise
 	 if (t_lead[i] < 110. || t_lead[i] > 220.)
 	   continue;
-	 
+
 	 // requirement for ToT and min_adc
 	 //if (tot[i]<2.5 && min_adc[i] < -20.0*tot[i] - 20.0)
-	 if (tot[i] < 4.0 && t_rise[i] > 30.)
+	 if (tot[i] < 4.0 && t_rise[i] < -30.)
 	   continue;
 
 	 if (charge[i]  < 10.) // Very loose condition
 	   continue;
 
-	 if (min_adc[i] < 20.) // Sub-Leading strip condition
+	 if (min_adc[i] > -20.) // Sub-Leading strip condition
 	   continue;
 
 	 // Get charge
@@ -308,7 +357,7 @@ bool MySelection::Process(Long64_t entry)
 	   adjacent_charge_col[L][0] = charge[i];
 	 if (ch == adjacent_ch_col[L][1])
 	   adjacent_charge_col[L][1] = charge[i];
-	 
+
 	 // Skip event if number of hit layers is not 6 for pixel, If all strip have fit fill strip histograms
 	 //if ((hit_encoder=="111111" && L>3) || (hit_encoder.rfind("1111", 0) == 0 && L<4)) {
 	 if (L<4) { // Strip
@@ -321,7 +370,7 @@ bool MySelection::Process(Long64_t entry)
 	       h2_Tlead_ToT[L][ch]->Fill(t_lead[i]/2.0 + t_trail[i]/2.0, tot[i]);
 	       if (t_lead[i] -t_average[L] != 0)
 		 h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] - t_average[L]);
-	       
+
 	       h2_Tlead_T0[L][ch]->Fill(t_lead[i],  t0);
 	       float tlead_corr = t_lead[i] - f_thr_corr[L]->Eval(-1.0*min_adc[i]);
 	       //h_Tlead[L][ch]->Fill(t_lead[i]-1.0*t0);
@@ -339,7 +388,7 @@ bool MySelection::Process(Long64_t entry)
 	       h2_Tlead_ToT[L][ch]->Fill(t_lead[i]/2.0 + t_trail[i]/2.0, tot[i]);
 	       if (t_lead[i] -t_average[L] != 0)
 		 h2_Tlead_Amp[L][ch]->Fill(-1.0*min_adc[i], t_lead[i] - t_average[L]);
-	     
+
 	       h2_Tlead_T0[L][ch]->Fill(t_lead[i],  t0);
 	       float tlead_corr = t_lead[i] - f_thr_corr[L]->Eval(-1.0*min_adc[i]);
 	       //h_Tlead[L][ch]->Fill(t_lead[i]-1.0*t0);
@@ -349,22 +398,24 @@ bool MySelection::Process(Long64_t entry)
 	   }
 	 }
        } // End of pulse loop
-       
+
      } // End of channel loop
-     
+
      // Process
      if (L<4) { // Strip 0,1,2,3
        if (abs(leading_ch[L]-sub_leading_ch[L])==1) { // Find two successful hits
-	 // DEBUG cout << leading_ch << " " << leading_charge << ":" << sub_leading_ch << " " << sub_leading_charge << endl;
 	 hit_position[L] = (leading_ch[L]*leading_charge[L] + sub_leading_ch[L]*sub_leading_charge[L])/(leading_charge[L] + sub_leading_charge[L]) * 0.5;
        } else if (leading_ch[L]>0) { // Find leading channel only
 	 hit_position[L] = leading_ch[L]*0.5;
        }
+       int XorY = L%2;
+       hit_position[L] -= alingment_cf[XorY][L];
+       
        if (leading_charge[L] > 30.) {
 	 h_max_charge[L]->Fill(leading_charge[L]);
        }
 
-     } else { // Pixel
+     } else { // Pixel 4,5
        if (max_charge[L] > 100.) {
 	 h_max_charge[L]->Fill(max_charge[L]);
        }
@@ -375,12 +426,124 @@ bool MySelection::Process(Long64_t entry)
      }
    } // End of 2nd Layer loop
 
-   if (hit_position[0]>0.0 && hit_position[1]>0.0 && hit_position[2]>0.0 && hit_position[3]>0.0) {
-     h_strip_x_cor->Fill(hit_position[0]-hit_position[2]);
-     h_strip_y_cor->Fill(hit_position[1]-hit_position[3]);
+   // Get extraporated hit positions
+   double DUT_x_extrap[2] = {-10.0, -10.0};
+   double DUT_y_extrap[2] = {-10.0, -10.0};
+   double DUT_x[2] = {-10.0, -10.0};
+   double DUT_y[2] = {-10.0, -10.0};
+   
+   DUT_x_extrap[0] = extrap_fn(hit_position[0], hit_position[2], Z_STRIP_FRONT_X, Z_STRIP_BACK_X, Z_PIXEL_FRONT);
+   DUT_y_extrap[0] = extrap_fn(hit_position[1], hit_position[3], Z_STRIP_FRONT_Y, Z_STRIP_BACK_Y, Z_PIXEL_FRONT);
+   DUT_x_extrap[1] = extrap_fn(hit_position[0], hit_position[2], Z_STRIP_FRONT_X, Z_STRIP_BACK_X, Z_PIXEL_BACK);
+   DUT_y_extrap[1] = extrap_fn(hit_position[1], hit_position[3], Z_STRIP_FRONT_Y, Z_STRIP_BACK_Y, Z_PIXEL_BACK);
+
+   // Get pixel hit position from
+   //  adjacent_ch_col[4][0] or adjacent_ch_col[4][1]
+   for (int L = 4; L < kMaxLayers; L++) {
+     if (leading_ch[L] < 0) continue;
+
+     int sub_leading_ch_x = leading_ch[L]; //
+     int sub_leading_ch_y = leading_ch[L]; //
+     float sub_leading_charge_x = max_charge[L]; //
+     float sub_leading_charge_y = max_charge[L]; //
+     // X
+     if (adjacent_ch_col[L][0] != -99 || adjacent_ch_col[L][1] != -99) {
+       if (adjacent_ch_col[L][0] == -99) { // Use [1]
+	 sub_leading_ch_x = adjacent_ch_col[L][1];
+	 sub_leading_charge_x = adjacent_charge_col[L][1];
+       } else if (adjacent_ch_col[L][1] == -99) { // Use [0]
+	 sub_leading_ch_x = adjacent_ch_col[L][0];
+	 sub_leading_charge_x = adjacent_charge_col[L][0];
+       } else if (adjacent_charge_col[L][0] > adjacent_charge_col[L][1]) {
+	 sub_leading_ch_x = adjacent_ch_col[L][0];
+	 sub_leading_charge_x = adjacent_charge_col[L][0];
+       } else {
+	 sub_leading_ch_x = adjacent_ch_col[L][1];
+	 sub_leading_charge_x = adjacent_charge_col[L][1];
+       }
+     }
+     // Y
+     if (adjacent_ch_row[L][0] != -99 || adjacent_ch_row[L][1] != -99) {
+       if (adjacent_ch_row[L][0] == -99) { // Use [1]
+	 sub_leading_ch_y = adjacent_ch_row[L][1];
+	 sub_leading_charge_y = adjacent_charge_row[L][1];
+       } else if (adjacent_ch_row[L][1] == -99) { // Use [0]  
+	 sub_leading_ch_y = adjacent_ch_row[L][0];
+	 sub_leading_charge_y = adjacent_charge_row[L][0];
+       } else if (adjacent_charge_row[L][0] > adjacent_charge_row[L][1]) {
+	 sub_leading_ch_y = adjacent_ch_row[L][0];
+	 sub_leading_charge_y = adjacent_charge_row[L][0];
+       } else {
+	 sub_leading_ch_y = adjacent_ch_row[L][1];
+	 sub_leading_charge_y = adjacent_charge_row[L][1];
+       }
+     }
+
+     // Get weighted mean
+     bool find_x = false;
+     bool find_y = false;
+     if (sub_leading_charge_x!=0.0) {
+       find_x = true;
+       DUT_x[L-4] = 0.5*(mapping_col[leading_ch[L]]*max_charge[L]
+		     + mapping_col[sub_leading_ch_x]*sub_leading_charge_x)
+	 /(max_charge[L] +sub_leading_charge_x);
+     } else {
+       DUT_x[L-4] = 0.5*mapping_col[leading_ch[L]];
+     }
+     if (sub_leading_charge_x!=0.0) {
+       find_y = true;
+       DUT_y[L-4] = 0.5*(mapping_row[leading_ch[L]]*max_charge[L]
+		     + mapping_row[sub_leading_ch_y]*sub_leading_charge_y)
+	 /(max_charge[L] +sub_leading_charge_y);
+     } else {
+       DUT_y[L-4] = 0.5*mapping_row[leading_ch[L]];
+     }
+
+     DUT_x[L-4] -= alingment_cf[0][L];
+     DUT_y[L-4] -= alingment_cf[1][L];
+     
+     h2_DUT_x_cor[L]->Fill(DUT_x_extrap[L-4], DUT_x[L-4]);
+     h2_DUT_y_cor[L]->Fill(DUT_y_extrap[L-4], DUT_y[L-4]);
+     h_DUT_x_diff[L]->Fill(DUT_x[L-4] - DUT_x_extrap[L-4]);
+     h_DUT_y_diff[L]->Fill(DUT_y[L-4] - DUT_y_extrap[L-4]);
+
+     if (find_x) {
+       h2_DUT_x_cor_CS[L]->Fill(DUT_x_extrap[L-4], DUT_x[L-4]);
+       h_DUT_x_diff_CS[L]->Fill(DUT_x[L-4] - DUT_x_extrap[L-4]);
+     }
+     if (find_y) {
+       h2_DUT_y_cor_CS[L]->Fill(DUT_y_extrap[L-4], DUT_y[L-4]);
+       h_DUT_y_diff_CS[L]->Fill(DUT_y[L-4] - DUT_y_extrap[L-4]);
+     }     
+   } // End of loop for Pixel layers
+
+   /*
+   if (hit_encoder=="111111") { // Hits in all layers
+     cout << "HITS,0,X," << hit_position[0] << endl
+	  << "HITS,1,Y," << hit_position[1] << endl
+	  << "HITS,2,X," << hit_position[2] << endl
+	  << "HITS,3,Y," << hit_position[3] << endl
+	  << "HITS,4,X," << DUT_x[0] << endl
+	  << "HITS,4,Y," << DUT_y[0] << endl
+	  << "HITS,5,X," << DUT_x[1] << endl
+	  << "HITS,5,Y," << DUT_y[1] << endl;
+   }
+   */
+   if (hit_position[0]>0.5 && hit_position[2]>0.5 && hit_position[0]<3.5 && hit_position[2]<3.5) {
      h2_strip_x_cor->Fill(hit_position[0],hit_position[2]);
+   }
+   if (hit_position[1]>0.5 && hit_position[3]>0.5 &&hit_position[1]<3.5 && hit_position[3]<3.5) {
      h2_strip_y_cor->Fill(hit_position[1],hit_position[3]);
    }
+   if (hit_position[0]>1.0 && hit_position[0]<3.0) {
+     h_strip_x_cor->Fill(hit_position[0]-hit_position[2]);
+   }
+   if (hit_position[1]>1.0 && hit_position[1]<3.0) {
+     h_strip_y_cor->Fill(hit_position[1]-hit_position[3]);
+   }
+
+
+   
    return true;
 }
 
@@ -403,11 +566,20 @@ void MySelection::Terminate()
   h_strip_y_cor->Write();
   h2_strip_x_cor->Write();
   h2_strip_y_cor->Write();
-  
+
     for (int L = 0; L < kMaxLayers; L++) {
       h_sum_charge[L]->Write();
       h_max_charge[L]->Write();
       h2_Tlead[L]->Write();
+      h2_DUT_x_cor[L]->Write();
+      h2_DUT_y_cor[L]->Write();
+      h2_DUT_x_cor_CS[L]->Write();
+      h2_DUT_y_cor_CS[L]->Write();
+      h_DUT_x_diff[L]->Write();
+      h_DUT_y_diff[L]->Write();
+      h_DUT_x_diff_CS[L]->Write();
+      h_DUT_y_diff_CS[L]->Write();
+
         for (int ch = 0; ch < kNCh[L]; ch++) {
             h2_ToT_Charge[L][ch]->Write();
             h2_ToT_Amp[L][ch]->Write();
@@ -421,4 +593,11 @@ void MySelection::Terminate()
 
     fout->Close();
 
+}
+
+double MySelection::extrap_fn(double c_front, double c_back, float z_front, float z_back, float z_target)
+{
+    if (z_back == z_front)
+      return c_front;
+    return c_front + (c_back - c_front) * (z_target - z_front) / (z_back - z_front);
 }

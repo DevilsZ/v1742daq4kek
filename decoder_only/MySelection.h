@@ -57,11 +57,28 @@ public :
 
   static constexpr int PIXEL_NROW = 4;
   static constexpr int PIXEL_NCOL = 4;
-  static constexpr int mapping_row[16] = {3, 3, 2, 2, 1, 1, 0, 0,
-					  0, 0, 1, 1, 2, 2, 3, 3};
+  static constexpr int mapping_row[16] = {0, 0, 1, 1, 2, 2, 3, 3,
+					  3, 3, 2, 2, 1, 1, 0, 0};
   static constexpr int mapping_col[16] = {2, 3, 2, 3, 2, 3, 2, 3,
 					  0, 1, 0, 1, 0, 1, 0, 1};
-  
+
+  // Z positions [mm] -- adjust to actual geometry
+  static constexpr float Z_STRIP_FRONT_X = 0.0f;
+  static constexpr float Z_STRIP_FRONT_Y = 24.0f;
+  static constexpr float Z_STRIP_BACK_X  = 375.0f;
+  static constexpr float Z_STRIP_BACK_Y  = 399.0f;
+  static constexpr float Z_PIXEL_FRONT   = 490.5f;
+  static constexpr float Z_PIXEL_BACK    = 510.0f;  
+
+  // Alignment correction factor
+  //static constexpr float alingment_cf[2] = {0.5, 0.5};
+  //static constexpr float alingment_cf[2] = {0.0, 0.0};
+  static constexpr float alingment_cf[2][kMaxLayers] = {
+    {0.0f, 0.0f, -0.83,  0.0f, -2.41, -2.24},
+    {0.0f, 0.0f,  0.0f, -1.44, -3.01, -3.42}
+  };
+
+ 
   // Time walk correction
   TF1* f_thr_corr[kMaxLayers];
   static constexpr float p0[kMaxLayers] = {-3.75, -1.70, -4.20, -1.20, -1.16, -1.64};
@@ -119,6 +136,14 @@ public :
   // 2D correlation
   TH2F* h2_strip_x_cor = nullptr;
   TH2F* h2_strip_y_cor = nullptr;
+  TH2F* h2_DUT_x_cor[kMaxLayers] = {nullptr};
+  TH2F* h2_DUT_y_cor[kMaxLayers] = {nullptr};
+  TH2F* h2_DUT_x_cor_CS[kMaxLayers] = {nullptr};
+  TH2F* h2_DUT_y_cor_CS[kMaxLayers] = {nullptr};
+  TH1F* h_DUT_x_diff[kMaxLayers] = {nullptr};
+  TH1F* h_DUT_y_diff[kMaxLayers] = {nullptr};
+  TH1F* h_DUT_x_diff_CS[kMaxLayers] = {nullptr};
+  TH1F* h_DUT_y_diff_CS[kMaxLayers] = {nullptr};
   
    // Readers to access the data (delete the ones you do not need).
   TTreeReaderValue<Long64_t> ev_id = {fReader, "ev_id"};
@@ -147,7 +172,8 @@ public :
    TList  *GetOutputList() const override { return fOutput; }
    void    SlaveTerminate() override;
    void    Terminate() override;
-
+   double  extrap_fn(double c_front, double c_back, float z_front, float z_back, float z_target);
+  
    ClassDefOverride(MySelection,0);
 
 };
