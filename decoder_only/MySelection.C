@@ -73,12 +73,15 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
 			     8,0,4,8,0,4);
 
    for (int L = 0; L < kMaxLayers; L++) {
+     h2_max_charge_sum_charge[L] = new TH2F(Form("h2_max_charge_sum_charge_%s", kLayerNames[L]),
+					    Form("h2_max_charge_sum_charge_%s", kLayerNames[L]),
+					    50, 0, 4000, 50, 0, 20000);
      h_sum_charge[L] = new TH1F(Form("h_sum_charge_%s", kLayerNames[L]),
 				Form("h_sum_charge_%s", kLayerNames[L]),
-				100, 0, 20000);
+				50, 0, 20000);
      h_max_charge[L] = new TH1F(Form("h_max_charge_%s", kLayerNames[L]),
 				Form("h_max_charge_%s", kLayerNames[L]),
-				100, 0, 4000);
+				50, 0, 4000);
      h2_Tlead[L]     = new TH2F(Form("h2_Tlead_%s", kLayerNames[L]),
 				Form("T_lead vs ch %s;Channel;\{t_lead - t_average};", kLayerNames[L]),
 				kNCh[L], 0, kNCh[L], 100, -50, 50);
@@ -93,6 +96,13 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
 				   80, -2.0, 6.0, 80, -2.0, 6.0);
      h2_DUT_y_cor_CS[L] = new TH2F(Form("h2_DUT_y_cor_CS_%s", kLayerNames[L]),
 				   Form("DUT center Y vs X extra %s (Charge Shared);Y extra;DUT center Y", kLayerNames[L]),
+				   80, -2.0, 6.0, 80, -2.0, 6.0);
+     // 2D Map
+     h2_DUT_map[L] = new TH2F(Form("h2_DUT_map_%s", kLayerNames[L]),
+				   Form("DUT center X vs DUT center Y (%s);Y DUT center X;DUT center Y", kLayerNames[L]),
+				   80, -2.0, 6.0, 80, -2.0, 6.0);
+     h2_DUT_extrap_map[L] = new TH2F(Form("h2_DUT_extrap_map_%s", kLayerNames[L]),
+				   Form("DUT extra X vs DUT extra Y (%s);Y DUT extra X;DUT extra Y", kLayerNames[L]),
 				   80, -2.0, 6.0, 80, -2.0, 6.0);
 
      h_DUT_x_diff[L] = new TH1F(Form("h_DUT_x_diff_%s", kLayerNames[L]),
@@ -109,6 +119,7 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
 				Form("%s (Charge Shared);DUT center Y - Y_{extra} [mm]", kLayerNames[L]),
 				80, -4.0, 4.0);
 
+     GetOutputList()->Add(h2_max_charge_sum_charge[L]);
      GetOutputList()->Add(h_sum_charge[L]);
      GetOutputList()->Add(h_max_charge[L]);
      GetOutputList()->Add(h2_Tlead[L]);
@@ -116,6 +127,8 @@ void MySelection::SlaveBegin(TTree * /*tree*/)
      GetOutputList()->Add(h2_DUT_y_cor[L]);
      GetOutputList()->Add(h2_DUT_x_cor_CS[L]);
      GetOutputList()->Add(h2_DUT_y_cor_CS[L]);
+     GetOutputList()->Add(h2_DUT_map[L]);
+     GetOutputList()->Add(h2_DUT_extrap_map[L]);
      GetOutputList()->Add(h_DUT_x_diff[L]);
      GetOutputList()->Add(h_DUT_y_diff[L]);
      GetOutputList()->Add(h_DUT_x_diff_CS[L]);
@@ -254,6 +267,9 @@ bool MySelection::Process(Long64_t entry)
 	 if (min_adc[i] > -50.) // Leading strip condition
 	   continue;
 
+	 // charge correction
+	 charge[i] += -1.0 * (-20.0 - pedestal[i]) * tot[i];
+
 	 // Find leading channel, and sub-leading channel for stip
 	 if (L<4) { // Strip layer; this process only for strip
 	   if (charge[i] > leading_charge[L]) { // Update leading strip
@@ -359,7 +375,7 @@ bool MySelection::Process(Long64_t entry)
 	   adjacent_charge_col[L][1] = charge[i];
 
 	 // Skip event if number of hit layers is not 6 for pixel, If all strip have fit fill strip histograms
-	 //if ((hit_encoder=="111111" && L>3) || (hit_encoder.rfind("1111", 0) == 0 && L<4)) {
+	 // if ((hit_encoder=="111111" && L>3) || (hit_encoder.rfind("1111", 0) == 0 && L<4)) {
 	 if (L<4) { // Strip
 	   if (hit_encoder.rfind("1111", 0) == 0) { // All strip layers have hits
 	     // Fill histograms
@@ -404,25 +420,29 @@ bool MySelection::Process(Long64_t entry)
      // Process
      if (L<4) { // Strip 0,1,2,3
        if (abs(leading_ch[L]-sub_leading_ch[L])==1) { // Find two successful hits
-	 hit_position[L] = (leading_ch[L]*leading_charge[L] + sub_leading_ch[L]*sub_leading_charge[L])/(leading_charge[L] + sub_leading_charge[L]) * 0.5;
+	 hit_position[L] = (leading_ch[L]*leading_charge[L] + sub_leading_ch[L]*sub_leading_charge[L])/(leading_charge[L] + sub_leading_charge[L]) * 0.5 + 0.25;
        } else if (leading_ch[L]>0) { // Find leading channel only
-	 hit_position[L] = leading_ch[L]*0.5;
+	 hit_position[L] = -100.f;//leading_ch[L]*0.5;
        }
        int XorY = L%2;
        hit_position[L] -= alingment_cf[XorY][L];
-       
+
        if (leading_charge[L] > 30.) {
 	 h_max_charge[L]->Fill(leading_charge[L]);
        }
-
-     } else { // Pixel 4,5
-       if (max_charge[L] > 100.) {
-	 h_max_charge[L]->Fill(max_charge[L]);
+       if (sum_charge[L] > 0.0) {
+	 h_sum_charge[L]->Fill(sum_charge[L]);
        }
-     }
-
-     if (sum_charge[L] > 0.0) {
-       h_sum_charge[L]->Fill(sum_charge[L]);
+     } else { // Pixel 4,5
+       continue;
+       /*
+	 if (max_charge[L] > 100.) {
+	 h_max_charge[L]->Fill(max_charge[L]);
+	 if (sum_charge[L] > 0.0) {
+	   h2_max_charge_sum_charge[L]->Fill(max_charge[L], sum_charge[L]);
+	 }
+       }
+       */
      }
    } // End of 2nd Layer loop
 
@@ -431,7 +451,7 @@ bool MySelection::Process(Long64_t entry)
    double DUT_y_extrap[2] = {-10.0, -10.0};
    double DUT_x[2] = {-10.0, -10.0};
    double DUT_y[2] = {-10.0, -10.0};
-   
+
    DUT_x_extrap[0] = extrap_fn(hit_position[0], hit_position[2], Z_STRIP_FRONT_X, Z_STRIP_BACK_X, Z_PIXEL_FRONT);
    DUT_y_extrap[0] = extrap_fn(hit_position[1], hit_position[3], Z_STRIP_FRONT_Y, Z_STRIP_BACK_Y, Z_PIXEL_FRONT);
    DUT_x_extrap[1] = extrap_fn(hit_position[0], hit_position[2], Z_STRIP_FRONT_X, Z_STRIP_BACK_X, Z_PIXEL_BACK);
@@ -467,7 +487,7 @@ bool MySelection::Process(Long64_t entry)
        if (adjacent_ch_row[L][0] == -99) { // Use [1]
 	 sub_leading_ch_y = adjacent_ch_row[L][1];
 	 sub_leading_charge_y = adjacent_charge_row[L][1];
-       } else if (adjacent_ch_row[L][1] == -99) { // Use [0]  
+       } else if (adjacent_ch_row[L][1] == -99) { // Use [0]
 	 sub_leading_ch_y = adjacent_ch_row[L][0];
 	 sub_leading_charge_y = adjacent_charge_row[L][0];
        } else if (adjacent_charge_row[L][0] > adjacent_charge_row[L][1]) {
@@ -486,26 +506,29 @@ bool MySelection::Process(Long64_t entry)
        find_x = true;
        DUT_x[L-4] = 0.5*(mapping_col[leading_ch[L]]*max_charge[L]
 		     + mapping_col[sub_leading_ch_x]*sub_leading_charge_x)
-	 /(max_charge[L] +sub_leading_charge_x);
+	 /(max_charge[L] +sub_leading_charge_x) + 0.25;
      } else {
-       DUT_x[L-4] = 0.5*mapping_col[leading_ch[L]];
+       DUT_x[L-4] = -100.f;//0.5*mapping_col[leading_ch[L]] + 0.25;
      }
      if (sub_leading_charge_x!=0.0) {
        find_y = true;
        DUT_y[L-4] = 0.5*(mapping_row[leading_ch[L]]*max_charge[L]
 		     + mapping_row[sub_leading_ch_y]*sub_leading_charge_y)
-	 /(max_charge[L] +sub_leading_charge_y);
+	 /(max_charge[L] +sub_leading_charge_y) + 0.25;
      } else {
-       DUT_y[L-4] = 0.5*mapping_row[leading_ch[L]];
+       DUT_y[L-4] = -100.f;//0.5*mapping_row[leading_ch[L]] + 0.25;
      }
 
      DUT_x[L-4] -= alingment_cf[0][L];
      DUT_y[L-4] -= alingment_cf[1][L];
-     
+
      h2_DUT_x_cor[L]->Fill(DUT_x_extrap[L-4], DUT_x[L-4]);
      h2_DUT_y_cor[L]->Fill(DUT_y_extrap[L-4], DUT_y[L-4]);
      h_DUT_x_diff[L]->Fill(DUT_x[L-4] - DUT_x_extrap[L-4]);
      h_DUT_y_diff[L]->Fill(DUT_y[L-4] - DUT_y_extrap[L-4]);
+
+     h2_DUT_map[L]->Fill(DUT_x[L-4], DUT_y[L-4]);
+     h2_DUT_extrap_map[L]->Fill(DUT_x_extrap[L-4], DUT_y_extrap[L-4]);
 
      if (find_x) {
        h2_DUT_x_cor_CS[L]->Fill(DUT_x_extrap[L-4], DUT_x[L-4]);
@@ -514,7 +537,23 @@ bool MySelection::Process(Long64_t entry)
      if (find_y) {
        h2_DUT_y_cor_CS[L]->Fill(DUT_y_extrap[L-4], DUT_y[L-4]);
        h_DUT_y_diff_CS[L]->Fill(DUT_y[L-4] - DUT_y_extrap[L-4]);
-     }     
+     }
+
+     if (DUT_x[L-4] > fiducial_vol_min[0][L]
+	 && DUT_x[L-4] < fiducial_vol_max[0][L]
+	 && DUT_y[L-4] > fiducial_vol_min[1][L]
+	 && DUT_y[L-4] < fiducial_vol_max[1][L]) {
+       if (max_charge[L] > 100.) {
+	 h_max_charge[L]->Fill(max_charge[L]);
+	 if (sum_charge[L] > 0.0) {
+	   h2_max_charge_sum_charge[L]->Fill(max_charge[L], sum_charge[L]);
+	 }
+       }
+       if (sum_charge[L] > 0.0) {
+	 h_sum_charge[L]->Fill(sum_charge[L]);
+       }
+     }
+     
    } // End of loop for Pixel layers
 
    /*
@@ -543,7 +582,7 @@ bool MySelection::Process(Long64_t entry)
    }
 
 
-   
+
    return true;
 }
 
@@ -570,11 +609,14 @@ void MySelection::Terminate()
     for (int L = 0; L < kMaxLayers; L++) {
       h_sum_charge[L]->Write();
       h_max_charge[L]->Write();
+      h2_max_charge_sum_charge[L]->Write();
       h2_Tlead[L]->Write();
       h2_DUT_x_cor[L]->Write();
       h2_DUT_y_cor[L]->Write();
       h2_DUT_x_cor_CS[L]->Write();
       h2_DUT_y_cor_CS[L]->Write();
+      h2_DUT_map[L]->Write();
+      h2_DUT_extrap_map[L]->Write();
       h_DUT_x_diff[L]->Write();
       h_DUT_y_diff[L]->Write();
       h_DUT_x_diff_CS[L]->Write();
